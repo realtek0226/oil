@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>成品油研究系统登录</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260601-11" />
+  </head>
+  <body class="login-body" data-theme="light">
+    <a class="skip-link" href="#login-panel">跳到登录表单</a>
+
+    <div class="login-shell">
+      <header class="login-topbar">
+        <div class="login-brand">
+          <img class="login-brand-logo" src="/static/assets/zhonglu-logo.png?v=2" alt="中鲁燃能" width="128" height="32" />
+          <div>
+            <strong class="brand-wordmark">中鲁燃能</strong>
+          </div>
+        </div>
+
+        <div class="theme-switch" aria-label="主题切换">
+          <button class="theme-tab is-active" type="button" data-theme-value="light" aria-label="浅色主题">☀</button>
+          <button class="theme-tab" type="button" data-theme-value="dark" aria-label="深色主题">◐</button>
+        </div>
+      </header>
+
+      <main class="login-main">
+        <section class="login-stage">
+          <div class="login-copy">
+            <p class="brand-kicker">Brent 实时 · 山东 92# 预测 · 区域价差 · 晨报预警</p>
+            <h1>进入研究台</h1>
+            <p class="login-copy-text">登录后可查看价格快照、预测结论、政策事件与智能体运行记录，并在权限范围内生成新的研究判断。</p>
+
+            <div class="login-feature-grid">
+              <article class="summary-card">
+                <span>实时市场</span>
+                <strong>Brent 秒级刷新</strong>
+                <small>价格快照与研究结论分离刷新</small>
+              </article>
+              <article class="summary-card">
+                <span>研究输出</span>
+                <strong>点位与区间</strong>
+                <small>D1 / D3 / W1 / M1 多周期直出</small>
+              </article>
+              <article class="summary-card">
+                <span>辅助模块</span>
+                <strong>晨报与预警</strong>
+                <small>晨会、黑天鹅与政策事件联动</small>
+              </article>
+            </div>
+          </div>
+
+          <section id="login-panel" class="panel login-panel">
+            <div class="panel-head compact">
+              <div>
+                <h2>账号登录</h2>
+                <p class="panel-copy">使用已分配的研究账号登录。</p>
+              </div>
+              <div id="login-status" class="chip soft-chip">待登录</div>
+            </div>
+
+            <form id="login-form" class="login-form">
+              <label class="field">
+                <span>用户名</span>
+                <input id="login-username" type="text" autocomplete="username" placeholder="输入用户名" />
+              </label>
+
+              <label class="field">
+                <span>密码</span>
+                <input id="login-password" type="password" autocomplete="current-password" placeholder="输入密码" />
+              </label>
+
+              <label class="toggle-chip toggle-chip--checkbox login-remember">
+                <input id="login-remember" type="checkbox" />
+                <span>两周内保持登录</span>
+              </label>
+
+              <div id="login-error" class="form-error" hidden></div>
+
+              <button id="login-submit" class="primary-button" type="submit">登录系统</button>
+            </form>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/login.js" defer></script>
+  </body>
+</html>

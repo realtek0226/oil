@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>成品油研究工作台</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260613-1130-freight-dense-orange" />
+  </head>
+  <body data-theme="light">
+    <a class="skip-link" href="#main">跳到主要内容</a>
+
+    <div class="shell">
+      <header class="topbar">
+        <div class="nav-shell">
+          <button id="nav-logo" class="nav-logo" type="button" aria-label="回到首页">
+            <img class="nav-logo-image" src="/static/assets/zhonglu-logo.png?v=2" alt="中鲁燃能" width="112" height="28" />
+            <span class="brand-wordmark">中鲁燃能</span>
+          </button>
+
+          <nav class="main-nav" aria-label="主导航">
+            <button class="main-tab is-active" type="button" data-view-target="home" data-permission="workbench.view">首页</button>
+            <button class="main-tab" type="button" data-view-target="clearview" data-permission="workbench.view">一屏看清</button>
+            <button class="main-tab" type="button" data-view-target="accuracy" data-permission="workbench.view">预测复盘</button>
+            <button class="main-tab" type="button" data-view-target="policy" data-permission="policy.view">政策与事件</button>
+            <button class="main-tab" type="button" data-view-target="agents" data-permission="agents.view">智能体管理</button>
+            <button class="main-tab" type="button" data-view-target="profile" data-permission="profile.view">个人中心</button>
+            <button class="main-tab" type="button" data-view-target="permissions" data-permission="permissions.manage">权限管理</button>
+          </nav>
+
+          <div class="nav-utilities">
+            <div class="theme-switch" aria-label="主题切换">
+              <button class="theme-tab is-active" type="button" data-theme-value="light" aria-label="浅色主题">☀</button>
+              <button class="theme-tab" type="button" data-theme-value="dark" aria-label="深色主题">◐</button>
+            </div>
+
+            <div class="header-chips">
+              <div id="global-status" class="chip status-chip" hidden></div>
+              <div id="market-refresh-meta" class="chip" hidden></div>
+            </div>
+
+            <div class="account-chip">
+              <button id="account-entry" class="account-entry" type="button" aria-label="进入个人中心">
+                <span id="account-avatar" class="account-avatar">研</span>
+                <span class="account-copy">
+                  <strong id="account-name">加载中</strong>
+                  <small id="account-title">用户信息同步中</small>
+                </span>
+              </button>
+              <button id="logout-button" class="ghost-button compact-button" type="button">退出登录</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="workspace-bar">
+          <div id="agents-subnav" class="sub-nav" aria-label="智能体二级导航" hidden>
+            <button class="sub-tab is-active" type="button" data-agent-subview="overview">运行总览</button>
+            <button class="sub-tab" type="button" data-agent-subview="optimization">自优化</button>
+          </div>
+        </div>
+      </header>
+
+      <main id="main" class="view-stack">
+        <section id="view-home" class="view is-active" data-view="home">
+          <div class="home-layout">
+            <aside class="rail rail-left">
+              <section class="panel rail-panel alert-panel">
+                <div class="panel-head compact">
+                  <div>
+                    <h2>重点预警</h2>
+                  </div>
+                  <div id="alert-meta" class="chip soft-chip">待刷新</div>
+                </div>
+                <div id="alert-list" class="alert-list"></div>
+              </section>
+
+            </aside>
+
+            <div class="home-center">
+              <section class="panel briefing-panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>晨报</h2>
+                    <p class="panel-copy">10:30 后默认收起，保留手动展开。</p>
+                  </div>
+                  <div class="head-side">
+                    <div id="briefing-meta" class="chip">暂无晨报</div>
+                    <button id="briefing-toggle" class="secondary-button" type="button" aria-controls="briefing-content" aria-expanded="true">收起晨报</button>
+                    <button id="briefing-generate" class="secondary-button" type="button">重生成晨报</button>
+                  </div>
+                </div>
+                <div id="briefing-content" class="briefing-content"></div>
+              </section>
+
+              <section class="panel research-panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>研究台</h2>
+                    <p class="panel-copy">研究结论、驱动解释、经营建议与区域价差放在同一个工作面里。</p>
+                  </div>
+                  <div class="head-side">
+                    <div id="research-meta" class="chip">结论待刷新</div>
+                    <div id="narrative-status" class="chip soft-chip">模型解释开启</div>
+                  </div>
+                </div>
+
+                <form id="research-form" class="research-controls">
+                  <div class="research-control-main">
+                    <label class="field field-wide">
+                      <span>情景备注</span>
+                      <input id="scenario-input" type="text" placeholder="例如：若布伦特再涨 2 美元，判断是否需要提前锁量" />
+                    </label>
+
+                    <div class="research-toggle-group">
+                      <label class="toggle-chip">
+                        <input id="toggle-news" type="checkbox" checked />
+                        <span>成品油资讯</span>
+                      </label>
+
+                      <label class="toggle-chip">
+                        <input id="toggle-event" type="checkbox" checked />
+                        <span>事件预警</span>
+                      </label>
+
+                      <label class="toggle-chip">
+                        <input id="toggle-narrative" type="checkbox" checked />
+                        <span>模型解释</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <button id="refresh-button" class="primary-button" type="submit">刷新研究结论</button>
+                </form>
+
+                <div id="horizon-switch" class="horizon-strip"></div>
+
+                <div class="research-grid">
+                  <div id="outright-panel" class="research-main"></div>
+                </div>
+
+              </section>
+            </div>
+
+            <aside class="rail rail-right">
+              <section class="panel chat-panel">
+                <div class="chat-panel-head">
+                  <div>
+                    <h2>模型对话</h2>
+                    <span>油价研究助手</span>
+                  </div>
+                  <div class="chat-head-actions">
+                    <button class="chat-history-button" type="button" aria-label="查看历史对话">历史</button>
+                    <button class="chat-reset-button" type="button" aria-label="新建对话">+</button>
+                  </div>
+                </div>
+
+                <div id="chat-history-panel" class="chat-history-panel" hidden>
+                  <div class="chat-history-title">
+                    <span>历史对话</span>
+                    <button id="chat-history-clear" type="button">清空</button>
+                  </div>
+                  <div id="chat-history-list" class="chat-history-list"></div>
+                </div>
+
+                <div id="chat-log" class="chat-log"></div>
+
+                <div class="quick-ask-row">
+                  <button class="ghost-pill" type="button" data-quick-ask="如果布伦特再涨 2 美元，山东 92# 的 D1 和 W1 怎么看？">布伦特再涨 2 美元</button>
+                  <button class="ghost-pill" type="button" data-quick-ask="华东价差如果继续走扩，山东现货该怎么操作？">华东价差走扩</button>
+                </div>
+
+                <form id="chat-form" class="chat-form">
+                  <label class="chat-composer">
+                    <span class="visually-hidden">提问</span>
+                    <textarea
+                      id="chat-input"
+                      rows="2"
+                      placeholder="询问点位、区间、价差或经营建议"
+                    ></textarea>
+                    <button id="chat-submit" class="chat-send-button" type="submit" aria-label="发送">↑</button>
+                  </label>
+                </form>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <section id="view-clearview" class="view" data-view="clearview">
+          <section class="panel clearview-panel clearview-page-panel">
+            <div class="panel-head">
+              <div>
+                <h2>一屏看清</h2>
+                <p class="panel-copy">价格快照、历史走势、区域价差与运费维护集中查看。</p>
+              </div>
+              <div class="head-side">
+                <div id="price-history-meta" class="chip soft-chip" hidden>待刷新</div>
+                <div id="snapshot-mode" class="chip accent-chip" hidden></div>
+                <div id="snapshot-date" class="chip" hidden></div>
+              </div>
+            </div>
+
+            <div class="clearview-scroll">
+              <section class="clearview-block clearview-spread-panel">
+                <div class="mini-head">
+                  <h3>区域价差</h3>
+                  <span>净回款与外发动作</span>
+                </div>
+                <div id="spread-grid" class="spread-grid"></div>
+              </section>
+
+              <div class="clearview-top">
+                <section class="clearview-block snapshot-panel">
+                  <div class="mini-head">
+                    <h3>关键经营指标</h3>
+                    <span>价格 + 隆众经营数据</span>
+                  </div>
+                  <div id="price-snapshot" class="snapshot-grid"></div>
+                </section>
+
+                <section class="clearview-block price-history-panel">
+                  <div class="mini-head">
+                    <h3>历史价格走势</h3>
+                    <span>山东、全国及区域</span>
+                  </div>
+                  <div id="price-history-range" class="price-history-range">
+                    <button type="button" data-history-days="7">7天</button>
+                    <button class="is-active" type="button" data-history-days="30">30天</button>
+                    <button type="button" data-history-days="90">90天</button>
+                    <button type="button" data-history-days="180">180天</button>
+                  </div>
+                  <div id="price-history-series" class="price-history-series"></div>
+                  <div id="price-history-chart" class="price-history-chart"></div>
+                </section>
+              </div>
+
+              <section class="clearview-block oilchem-inventory-panel">
+                <div class="mini-head">
+                  <div>
+                    <h3>区域库存</h3>
+                    <span>贸易商库存 + 主营库存，按周度调研口径展示</span>
+                  </div>
+                  <div class="inventory-actions">
+                    <label class="mini-date-field">
+                      <span>开始</span>
+                      <input id="oilchem-inventory-start" type="date" />
+                    </label>
+                    <label class="mini-date-field">
+                      <span>结束</span>
+                      <input id="oilchem-inventory-end" type="date" />
+                    </label>
+                    <button id="oilchem-inventory-refresh" class="secondary-button compact-button" type="button">查询</button>
+                    <button id="oilchem-inventory-export" class="primary-button compact-button" type="button">导出</button>
+                  </div>
+                </div>
+                <div id="oilchem-inventory-meta" class="chip soft-chip">待加载</div>
+                <div id="oilchem-inventory-filters" class="oilchem-inventory-filters"></div>
+                <div id="oilchem-inventory-selected" class="oilchem-inventory-selected"></div>
+                <div id="oilchem-inventory-summary" class="oilchem-inventory-summary" hidden></div>
+                <div id="oilchem-inventory-table" class="oilchem-inventory-table"></div>
+              </section>
+
+              <section class="mini-panel heatmap-panel">
+                <div class="mini-head">
+                  <h3>区域价差热力</h3>
+                  <span id="regional-horizon-label">-</span>
+                </div>
+                <div id="spread-heatmap" class="heatmap-list"></div>
+              </section>
+
+              <section class="mini-panel freight-panel">
+                <div class="mini-head">
+                  <h3>区域运费录入</h3>
+                  <button class="freight-save-all-button" type="button" data-freight-save-all>保存</button>
+                </div>
+                <div id="freight-settings-panel" class="freight-settings-panel"></div>
+              </section>
+            </div>
+          </section>
+        </section>
+
+        <section id="view-accuracy" class="view" data-view="accuracy">
+          <section class="panel accuracy-hero-panel">
+            <div class="panel-head">
+              <div>
+                <h2>预测复盘</h2>
+                <p class="panel-copy">把预测点位、区间和真实山东92#市场价逐条对齐，直接看偏差与命中。</p>
+              </div>
+              <div class="head-side">
+                <div id="accuracy-meta" class="chip soft-chip">待加载</div>
+                <button id="accuracy-refresh" class="secondary-button" type="button">刷新复盘</button>
+              </div>
+            </div>
+
+            <div id="accuracy-summary" class="accuracy-summary-grid"></div>
+          </section>
+
+          <section class="panel accuracy-board-panel">
+            <div class="panel-head compact">
+              <div>
+                <h2>偏差曲线</h2>
+                <p class="panel-copy">红色表示预测点低于真实值，绿色表示预测点高于真实值；越靠近中轴越准。</p>
+              </div>
+              <div id="accuracy-rule-meta" class="chip">山东92#</div>
+            </div>
+            <div id="accuracy-chart" class="accuracy-chart"></div>
+          </section>
+
+          <section class="panel accuracy-list-panel">
+            <div class="panel-head compact">
+              <div>
+                <h2>逐条明细</h2>
+                <p class="panel-copy">只统计目标日期已有真实价格的样本，未到期预测保留为待验证。</p>
+              </div>
+            </div>
+            <div id="accuracy-list" class="accuracy-list"></div>
+          </section>
+        </section>
+
+        <section id="view-policy" class="view" data-view="policy">
+          <section class="panel policy-filter-panel">
+            <div class="panel-head">
+              <div>
+                <h2>政策与事件</h2>
+                <p class="panel-copy">支持按日期切换资讯与政策，并按重要度或时间重新排序。</p>
+              </div>
+              <div id="policy-page-meta" class="chip">待加载</div>
+            </div>
+
+            <div class="policy-filters">
+              <label class="field">
+                <span>资讯日期</span>
+                <select id="news-date-select"></select>
+              </label>
+              <label class="field">
+                <span>政策日期</span>
+                <select id="policy-date-select"></select>
+              </label>
+
+              <div class="sort-group" aria-label="排序方式">
+                <button class="sort-tab is-active" type="button" data-sort-mode="importance">按重要度</button>
+                <button class="sort-tab" type="button" data-sort-mode="time">按时间</button>
+              </div>
+            </div>
+          </section>
+
+          <div class="policy-board">
+            <section class="panel feed-panel">
+              <div class="panel-head compact">
+                <div>
+                  <h2>成品油资讯</h2>
+                  <p class="panel-copy">优先显示可以阅读全文或有明确供需信息的资讯。</p>
+                </div>
+              </div>
+              <div id="refined-news-list" class="feed-list"></div>
+            </section>
+
+            <section class="panel feed-panel">
+              <div class="panel-head compact">
+                <div>
+                  <h2>事件快讯</h2>
+                  <p class="panel-copy">聚焦黑天鹅、地缘、产量与物流扰动。</p>
+                </div>
+              </div>
+              <div id="event-news-list" class="feed-list"></div>
+            </section>
+
+            <section class="panel feed-panel">
+              <div class="panel-head compact">
+                <div>
+                  <h2>政策公告</h2>
+                  <p class="panel-copy">展示调价公告及其对汽油价格的直接影响。</p>
+                </div>
+              </div>
+              <div id="policy-list" class="feed-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="view-agents" class="view" data-view="agents">
+          <section id="agent-subview-overview" class="agent-subview is-active" data-agent-subview="overview">
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>智能体总览</h2>
+                  <p class="panel-copy">看每个智能体当前状态、角色分工和最近贡献，不再单独放一个含糊的“运行时控制”。</p>
+                </div>
+                <div class="head-side">
+                  <div id="agent-status-chip" class="chip">待加载</div>
+                  <button id="agent-refresh" class="secondary-button" type="button">刷新智能体状态</button>
+                </div>
+              </div>
+              <div id="agent-overview-grid" class="agent-overview-grid"></div>
+            </section>
+
+            <div class="agent-main-grid">
+              <section class="panel">
+                <div class="panel-head compact">
+                  <div>
+                    <h2>关系图</h2>
+                    <p class="panel-copy">展示总控、子智能体、预测引擎和研究输出之间的联动。</p>
+                  </div>
+                </div>
+                <div id="agent-graph-stage" class="graph-stage">
+                  <svg id="agent-graph-svg" class="graph-svg" viewBox="0 0 1000 620" aria-hidden="true"></svg>
+                  <div id="agent-graph-nodes" class="graph-nodes"></div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head compact">
+                  <div>
+                    <h2>权重与启停</h2>
+                    <p class="panel-copy">作用是决定预测时各子智能体是否参与，以及各自贡献权重；只有确认后才会生效。</p>
+                  </div>
+                </div>
+                <div id="scope-controls" class="scope-controls"></div>
+              </section>
+            </div>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>运行与单体输出</h2>
+                  <p class="panel-copy">上方看最近运行，下方看本次详细输出，并继续回看选中智能体的历史口径。</p>
+                </div>
+                <div id="run-detail-meta" class="chip">未选择运行</div>
+              </div>
+
+              <div id="run-list" class="run-strip"></div>
+
+              <div class="run-studio">
+                <div id="run-detail" class="run-detail"></div>
+
+                <aside class="trace-panel">
+                  <div class="trace-head">
+                    <div class="trace-title">
+                      <h3>单体轨迹</h3>
+                      <p>与最近运行合并展示，便于核对单体口径是否在漂移。</p>
+                    </div>
+                    <div id="agent-history-meta" class="chip soft-chip">待选择</div>
+                  </div>
+                  <div id="agent-history-tabs" class="trace-tabs"></div>
+                  <div id="agent-history-list" class="trace-list"></div>
+                </aside>
+              </div>
+            </section>
+          </section>
+
+          <section id="agent-subview-optimization" class="agent-subview" data-agent-subview="optimization">
+            <div class="agent-main-grid">
+              <section class="panel">
+                <div class="panel-head">
+                  <div>
+                    <h2>自优化提案</h2>
+                    <p class="panel-copy">系统先给出建议，人手动确认后才会改变下一轮预测所用的权重与启停状态。</p>
+                  </div>
+                  <div class="head-side">
+                    <button id="proposal-generate" class="primary-button" type="button">生成提案</button>
+                    <button id="proposal-approve" class="secondary-button" type="button">确认应用</button>
+                    <button id="proposal-reject" class="ghost-button" type="button">暂不应用</button>
+                  </div>
+                </div>
+                <div id="proposal-status" class="proposal-status" aria-live="polite">待生成</div>
+                <div id="proposal-panel" class="proposal-panel"></div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head compact">
+                  <div>
+                    <h2>当前权重快照</h2>
+                    <p class="panel-copy">用于核对提案生效前后各个子智能体的状态变化。</p>
+                  </div>
+                </div>
+                <div id="optimization-scope-controls" class="scope-controls"></div>
+              </section>
+            </div>
+          </section>
+        </section>
+
+        <section id="view-profile" class="view" data-view="profile">
+          <div class="profile-layout">
+            <section class="panel profile-summary-panel">
+              <div class="panel-head">
+                <div>
+                  <h2>个人中心</h2>
+                  <p class="panel-copy">维护个人资料、密码与当前权限，保持研究台协作身份一致。</p>
+                </div>
+                <div id="profile-status-chip" class="chip">待加载</div>
+              </div>
+
+              <div class="profile-summary-grid">
+                <article class="summary-card">
+                  <span>账号</span>
+                  <strong id="profile-username">-</strong>
+                  <small id="profile-display-name">-</small>
+                </article>
+                <article class="summary-card">
+                  <span>最近登录</span>
+                  <strong id="profile-last-login">-</strong>
+                  <small id="profile-updated-at">-</small>
+                </article>
+                <article class="summary-card">
+                  <span>状态</span>
+                  <strong id="profile-active-status">-</strong>
+                  <small id="profile-permission-count">-</small>
+                </article>
+              </div>
+            </section>
+
+            <div class="profile-main-grid">
+              <section class="panel">
+                <div class="panel-head compact">
+                  <div>
+                    <h2>资料维护</h2>
+                    <p class="panel-copy">修改昵称、岗位与密码，保存后立即生效。</p>
+                  </div>
+                </div>
+
+                <form id="profile-form" class="profile-form">
+                  <div class="profile-form-grid">
+                    <label class="field">
+                      <span>显示名称</span>
+                      <input id="profile-display-input" type="text" placeholder="输入显示名称" />
+                    </label>
+                    <label class="field">
+                      <span>岗位名称</span>
+                      <input id="profile-title-input" type="text" placeholder="输入岗位名称" />
+                    </label>
+                    <label class="field">
+                      <span>新密码</span>
+                      <input id="profile-password-input" type="password" placeholder="留空则不修改密码" />
+                    </label>
+                    <label class="field">
+                      <span>确认新密码</span>
+                      <input id="profile-password-confirm-input" type="password" placeholder="再次输入新密码" />
+                    </label>
+                  </div>
+                  <div class="form-actions">
+                    <div id="profile-form-meta" class="chip soft-chip">尚未修改</div>
+                    <button id="profile-submit" class="primary-button" type="submit">保存个人信息</button>
+                  </div>
+                </form>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head compact">
+                  <div>
+                    <h2>当前权限</h2>
+                    <p class="panel-copy">显示当前账号可访问的模块与操作。</p>
+                  </div>
+                </div>
+                <div id="profile-permission-groups" class="permission-groups"></div>
+              </section>
+            </div>
+
+          </div>
+        </section>
+
+        <section id="view-permissions" class="view" data-view="permissions">
+          <div class="permission-layout">
+            <section class="panel permission-toolbar-panel">
+              <div class="panel-head">
+                <div>
+                  <h2>权限管理</h2>
+                  <p class="panel-copy">通过角色模板控制用户可访问的模块和操作。</p>
+                </div>
+                <div id="permission-meta" class="chip">待加载</div>
+              </div>
+              <div class="permission-toolbar">
+                <div id="permission-counts" class="header-chips"></div>
+              </div>
+            </section>
+
+            <div class="permission-main-grid">
+              <section class="panel">
+                <div class="panel-head compact">
+                  <div>
+                    <h2>新建用户</h2>
+                    <p class="panel-copy">创建研究账号，并绑定权限模板。</p>
+                  </div>
+                </div>
+
+                <form id="user-create-form" class="user-form">
+                  <div class="profile-form-grid">
+                    <label class="field">
+                      <span>登录名</span>
+                      <input id="create-username" type="text" placeholder="例如：sd_trader" />
+                    </label>
+                    <label class="field">
+                      <span>显示名称</span>
+                      <input id="create-display-name" type="text" placeholder="输入显示名称" />
+                    </label>
+                    <label class="field">
+                      <span>岗位名称</span>
+                      <input id="create-title" type="text" placeholder="输入岗位名称" />
+                    </label>
+                    <label class="field">
+                      <span>初始密码</span>
+                      <input id="create-password" type="password" placeholder="输入初始密码" />
+                    </label>
+                  </div>
+
+                  <label class="toggle-chip toggle-chip--checkbox">
+                    <input id="create-is-active" type="checkbox" checked />
+                    <span>创建后立即启用</span>
+                  </label>
+
+                  <div>
+                    <div class="section-label">初始角色</div>
+                    <div id="create-role-groups" class="role-template-list"></div>
+                  </div>
+
+                  <div class="form-actions">
+                    <div id="create-user-meta" class="chip soft-chip">待提交</div>
+                    <button id="create-user-submit" class="primary-button" type="submit">创建用户</button>
+                  </div>
+                </form>
+              </section>
+
+              <section class="panel">
+                <div class="panel-head compact">
+                  <div>
+                    <h2>用户与权限</h2>
+                    <p class="panel-copy">选择账号后维护其状态、显示名称和角色模板。</p>
+                  </div>
+                </div>
+
+                <div id="user-list" class="user-list"></div>
+
+                <div class="editor-divider"></div>
+
+                <form id="user-edit-form" class="user-form">
+                  <div class="panel-head compact">
+                    <div>
+                      <h2>编辑用户</h2>
+                      <p id="selected-user-caption" class="panel-copy">请选择左侧用户</p>
+                    </div>
+                    <div id="selected-user-meta" class="chip soft-chip">未选择</div>
+                  </div>
+
+                  <div class="profile-form-grid">
+                    <label class="field">
+                      <span>显示名称</span>
+                      <input id="edit-display-name" type="text" placeholder="输入显示名称" />
+                    </label>
+                    <label class="field">
+                      <span>岗位名称</span>
+                      <input id="edit-title" type="text" placeholder="输入岗位名称" />
+                    </label>
+                  </div>
+
+                  <label class="toggle-chip toggle-chip--checkbox">
+                    <input id="edit-is-active" type="checkbox" />
+                    <span>账号启用</span>
+                  </label>
+
+                  <div>
+                    <div class="section-label">角色模板</div>
+                    <div id="edit-role-groups" class="role-template-list"></div>
+                  </div>
+
+                  <div class="form-actions">
+                    <div id="edit-user-meta" class="chip soft-chip">待保存</div>
+                    <button id="edit-user-submit" class="primary-button" type="submit">保存用户权限</button>
+                  </div>
+                </form>
+              </section>
+            </div>
+
+            <section class="panel usage-log-panel">
+              <div class="panel-head compact">
+                <div>
+                  <h2>系统使用记录</h2>
+                  <p class="panel-copy">查看近期登录、预测、对话、晨报、用户管理等关键操作。</p>
+                </div>
+                <div id="usage-log-meta" class="chip soft-chip">待加载</div>
+              </div>
+              <div id="usage-log-list" class="usage-log-list"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="spread-detail-dialog" class="detail-dialog">
+      <div class="detail-dialog-shell">
+        <div class="detail-dialog-head">
+          <div>
+            <h2 id="spread-detail-title">区域价差详情</h2>
+            <p id="spread-detail-subtitle" class="panel-copy">完整驱动、建议和证据</p>
+          </div>
+          <button id="spread-detail-close" class="ghost-button compact-button" type="button">关闭</button>
+        </div>
+        <div id="spread-detail-content" class="spread-detail-content"></div>
+      </div>
+    </dialog>
+
+    <script src="/static/app.js?v=20260613-1130-freight-dense-orange" defer></script>
+  </body>
+</html>

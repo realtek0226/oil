@@ -1,0 +1,58 @@
+# Local runtime configuration and secrets
+app/config/app_config.json
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Runtime artifacts, logs, and generated outputs
+artifacts/
+outputs/
+debug.log
+*.log
+*.pid
+
+# Browser/session state
+storage_state*.json
+*storage_state*.json
+cookies*.json
+configs/oilchem_storage_state.json
+
+# Business data and local report artifacts
+*.xlsx
+*.xls
+*.docx
+*.pdf
+*.jpg
+数据清单及打分逻辑/
+
+# Office temp files
+~$*
+
+# Archive noise
+__MACOSX/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+data/
+*.zip
+*.7z
+*.rar
+*.db
+*.sqlite
+*.sqlite3
+app/config/app_config.local.json

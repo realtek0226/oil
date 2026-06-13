@@ -1,0 +1,74 @@
+{
+  "llm": {
+    "model_name": "",
+    "base_url": "",
+    "api_key": "",
+    "timeout_seconds": 60
+  },
+  "eta": {
+    "appid": "",
+    "secret": "",
+    "base_url": ""
+  },
+  "wind": {
+    "base_url": "",
+    "brent_code": "B.IPE",
+    "brent_fields": "rt_latest,rt_chg,rt_pct_chg",
+    "timeout_seconds": 5
+  },
+  "jinshi": {
+    "api_url": "",
+    "auth_token": "",
+    "secret_key_b64": ""
+  },
+  "oilchem_openapi": {
+    "enabled": false,
+    "base_url": "",
+    "username": "",
+    "password": "",
+    "timeout_seconds": 10
+  },
+  "research": {
+    "default_entity_code": "SD_GAS92",
+    "default_region_code": "SHANDONG",
+    "default_product_code": "GASOLINE_92",
+    "scorecard_path": "configs/scorecards/shandong_scorecards_v1.yaml"
+  },
+  "database": {
+    "url": "",
+    "schema": "oil_research",
+    "echo": false
+  },
+  "scheduler": {
+    "enabled": false,
+    "timezone": "Asia/Shanghai",
+    "snapshot_interval_seconds": 300,
+    "policy_event_interval_seconds": 900,
+    "morning_briefing_time": "08:05",
+    "brent_report_fetch_time": "08:00",
+    "morning_briefing_use_llm": true,
+    "oilchem_price_fetch_time": "19:00",
+    "oilchem_production_sales_fetch_time": "20:00",
+    "oilchem_independent_maintenance_fetch_time": "23:00",
+    "oilchem_main_maintenance_fetch_time": "01:00",
+    "oilchem_spot_report_fetch_time": "02:00",
+    "oilchem_daily_fetch_time": "",
+    "oilchem_openapi_inventory_fetch_time": "22:00"
+  },
+  "collectors": {
+    "web_scraping_enabled": false,
+    "refined_news_scraping_enabled": false,
+    "policy_scraping_enabled": false,
+    "oilchem_spot_report_scraping_enabled": false,
+    "oilchem_scraping_enabled": false
+  },
+  "auth": {
+    "bootstrap_admin_username": "admin",
+    "bootstrap_admin_password": "CHANGE_ME",
+    "bootstrap_admin_display_name": "System Administrator",
+    "session_ttl_hours": 12,
+    "remember_me_ttl_hours": 336,
+    "cookie_name": "oil_research_session",
+    "cookie_secure": false
+  }
+}

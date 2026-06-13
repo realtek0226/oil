@@ -1,0 +1,1074 @@
+version: "v1.2.0"
+owner: "oil_research"
+source_document: "山东成品油市场价预测打分模型.docx"
+generated_at: "2026-06-06"
+notes:
+  - "This file maps the business scorecard into machine-readable config."
+  - "Updated from the revised DOCX: CDU utilization uses the raw weekly utilization percentage directly for bucket scores when the value changes."
+  - "Updated from 数据清单及打分逻辑.xlsx: Brent bucket thresholds, W1 policy score, inventory buckets, gasoline seasonality, and production-sales ratio buckets are aligned with Excel where executable."
+
+globals:
+  score_range:
+    min: -100
+    max: 100
+  default_publish_mode: "deterministic"
+  default_missing_policy: "fallback_to_last_available"
+  default_currency: "CNY"
+  default_unit: "ton"
+  override_controls:
+    supply_news_adjustment_range:
+      min: -5
+      max: 5
+    extreme_event_total_adjustment_range:
+      min: -10
+      max: 10
+
+product_templates:
+  gasoline:
+    crack_feature_prefix: "gasoline"
+    monthly_seasonality:
+      peak_months: [5, 6, 7, 8]
+      secondary_peak_months: [3, 4, 9]
+      secondary_off_months: [2]
+      neutral_months: []
+      off_months: [1, 10, 11, 12]
+  diesel:
+    crack_feature_prefix: "diesel"
+    monthly_seasonality:
+      peak_months: [3, 4, 8, 9, 10]
+      neutral_months: [11, 12]
+      off_months: [1, 2, 5, 7]
+
+scorecards:
+  - scorecard_code: "sd_gas92"
+    display_name: "Shandong 92# gasoline"
+    entity_code: "SD_GAS92"
+    product_family: "gasoline"
+    horizons:
+      D1:
+        display_name: "T+1 daily"
+        target: "next_trading_day_market_price"
+        score_range: [-100, 100]
+        factor_groups:
+          - group_code: "cost"
+            display_name: "Cost side"
+            weight_pct: 40
+            score_cap: 40
+            features:
+              - feature_name: "brent_change_usd_d1"
+                method: "bucket_score"
+                rules:
+                  - min: 3
+                    max: null
+                    score: 40
+                    label: "large_up"
+                  - min: 2
+                    max: 3
+                    score: 30
+                    label: "medium_large_up"
+                  - min: 1
+                    max: 2
+                    score: 20
+                    label: "medium_up"
+                  - min: 0.5
+                    max: 1
+                    score: 10
+                    label: "small_up"
+                  - min: -0.5
+                    max: 0.5
+                    score: 0
+                    label: "flat"
+                  - min: -1
+                    max: -0.5
+                    score: -10
+                    label: "small_down"
+                  - min: -2
+                    max: -1
+                    score: -20
+                    label: "medium_down"
+                  - min: -3
+                    max: -2
+                    score: -30
+                    label: "medium_large_down"
+                  - min: null
+                    max: -3
+                    score: -40
+                    label: "large_down"
+                source_hint: "Keep current YAML/code data basis: Brent daily report forecast point minus previous settlement."
+            adjustments: []
+            formula_notes:
+              - "Gasoline crack = gasoline market price / 1.13 - 2109.76 - Brent * 6.77 * CNY mid"
+              - "Diesel crack = diesel market price / 1.13 - 1411.20 - Brent * 6.77 * CNY mid"
+              - "Use T-day market price if updated, otherwise T-1"
+          - group_code: "supply"
+            display_name: "Supply side"
+            weight_pct: 15
+            score_cap: 15
+            features:
+              - feature_name: "shandong_cdu_utilization_weekly"
+                method: "bucket_score"
+                rules:
+                  - min: null
+                    max: 25
+                    score: 15
+                    label: "low_utilization"
+                  - min: 25
+                    max: 45
+                    score: 8
+                    label: "medium_low_utilization"
+                  - min: 45
+                    max: 55
+                    score: 0
+                    label: "middle_utilization"
+                  - min: 55
+                    max: 75
+                    score: -8
+                    label: "medium_high_utilization"
+                  - min: 75
+                    max: null
+                    score: -15
+                    label: "high_utilization"
+                note: "山东地炼常减压开工率用周度原始百分比值直接分桶；若与前一条数据一致则0分。"
+            adjustments:
+              - feature_name: "shandong_refinery_load_news_adjustment_d1"
+                method: "bounded_numeric"
+                min: -5
+                max: 5
+                note: "Temporary load reduction / operational headlines"
+          - group_code: "demand"
+            display_name: "Demand side / production-sales ratio"
+            weight_pct: 30
+            score_cap: 30
+            features:
+              - feature_name: "sales_production_ratio_d1"
+                method: "bucket_score"
+                rules:
+                  - min: 110
+                    max: null
+                    score: 30
+                  - min: 100
+                    max: 110
+                    score: 15
+                  - min: 95
+                    max: 100
+                    score: 10
+                  - min: 90
+                    max: 95
+                    score: 5
+                  - min: 85
+                    max: 90
+                    score: 0
+                  - min: 70
+                    max: 85
+                    score: -15
+                  - min: null
+                    max: 70
+                    score: -30
+                fallback: "use_t_minus_1_if_missing"
+                note: "产销率=销量/产量*100；无产量数据时不再用销量环比替代"
+          - group_code: "sentiment"
+            display_name: "Sentiment side"
+            weight_pct: 15
+            score_cap: 15
+            features:
+              - feature_name: "trader_sentiment_label_d1"
+                method: "enum_score"
+                rules:
+                  bullish_active: 15
+                  neutral_flat: 0
+                  bearish_selling: -15
+                source_hint: "Midday review / daily commentary"
+
+      D3:
+        display_name: "T+3 short-term"
+        target: "three_day_market_price_direction"
+        score_range: [-100, 100]
+        factor_groups:
+          - group_code: "cost"
+            display_name: "Cost side"
+            weight_pct: 35
+            score_cap: 35
+            features:
+              - feature_name: "brent_change_usd_d3"
+                method: "bucket_score"
+                rules:
+                  - min: 3
+                    max: null
+                    score: 35
+                    label: "large_up"
+                  - min: 2
+                    max: 3
+                    score: 25
+                    label: "medium_large_up"
+                  - min: 1
+                    max: 2
+                    score: 15
+                    label: "medium_up"
+                  - min: 0.5
+                    max: 1
+                    score: 5
+                    label: "small_up"
+                  - min: -0.5
+                    max: 0.5
+                    score: 0
+                    label: "flat"
+                  - min: -1
+                    max: -0.5
+                    score: -5
+                    label: "small_down"
+                  - min: -2
+                    max: -1
+                    score: -15
+                    label: "medium_down"
+                  - min: -3
+                    max: -2
+                    score: -25
+                    label: "medium_large_down"
+                  - min: null
+                    max: -3
+                    score: -35
+                    label: "large_down"
+                source_hint: "Use crude forecast values"
+            adjustments: []
+          - group_code: "supply"
+            display_name: "Supply side"
+            weight_pct: 35
+            score_cap: 35
+            features:
+              - feature_name: "shandong_cdu_utilization_weekly"
+                method: "bucket_score"
+                rules:
+                  - min: null
+                    max: 25
+                    score: 35
+                    label: "low_utilization"
+                  - min: 25
+                    max: 45
+                    score: 18
+                    label: "medium_low_utilization"
+                  - min: 45
+                    max: 55
+                    score: 0
+                    label: "middle_utilization"
+                  - min: 55
+                    max: 75
+                    score: -18
+                    label: "medium_high_utilization"
+                  - min: 75
+                    max: null
+                    score: -35
+                    label: "high_utilization"
+                note: "山东地炼常减压开工率用周度原始百分比值直接分桶；若与前一条数据一致则0分。"
+            adjustments:
+              - feature_name: "shandong_refinery_load_news_adjustment_d3"
+                method: "bounded_numeric"
+                min: -5
+                max: 5
+          - group_code: "demand"
+            display_name: "Demand side / production-sales ratio"
+            weight_pct: 20
+            score_cap: 20
+            features:
+              - feature_name: "sales_production_ratio_d3_avg"
+                method: "bucket_score"
+                score_cap: 20
+                rules:
+                  - min: 110
+                    max: null
+                    score: 20
+                  - min: 100
+                    max: 110
+                    score: 10
+                  - min: 95
+                    max: 100
+                    score: 10
+                  - min: 90
+                    max: 95
+                    score: 5
+                  - min: 85
+                    max: 90
+                    score: 0
+                  - min: 70
+                    max: 85
+                    score: -10
+                  - min: null
+                    max: 70
+                    score: -20
+          - group_code: "sentiment"
+            display_name: "Sentiment side"
+            weight_pct: 10
+            score_cap: 10
+            features:
+              - feature_name: "trader_sentiment_label_d3"
+                method: "enum_score"
+                rules:
+                  bullish_active: 10
+                  neutral_flat: 0
+                  bearish_selling: -10
+
+      W1:
+        display_name: "T+7 weekly"
+        target: "next_7d_market_price_direction"
+        score_range: [-100, 100]
+        factor_groups:
+          - group_code: "cost"
+            display_name: "Cost side"
+            weight_pct: 30
+            score_cap: 30
+            features:
+              - feature_name: "brent_change_usd_w1"
+                method: "bucket_score"
+                rules:
+                  - min: 5
+                    max: null
+                    score: 30
+                    label: "large_up"
+                  - min: 3
+                    max: 5
+                    score: 20
+                    label: "medium_large_up"
+                  - min: 1.5
+                    max: 3
+                    score: 10
+                    label: "medium_up"
+                  - min: 0.5
+                    max: 1.5
+                    score: 5
+                    label: "small_up"
+                  - min: -0.5
+                    max: 0.5
+                    score: 0
+                    label: "flat"
+                  - min: -1.5
+                    max: -0.5
+                    score: -5
+                    label: "small_down"
+                  - min: -3
+                    max: -1.5
+                    score: -10
+                    label: "medium_down"
+                  - min: -5
+                    max: -3
+                    score: -20
+                    label: "medium_large_down"
+                  - min: null
+                    max: -5
+                    score: -30
+                    label: "large_down"
+                note: "Excel W+1 Brent bucket thresholds; value source remains crude forecast report."
+            adjustments: []
+          - group_code: "supply"
+            display_name: "Supply side"
+            weight_pct: 30
+            score_cap: 30
+            features:
+              - feature_name: "shandong_cdu_utilization_weekly"
+                method: "bucket_score"
+                rules:
+                  - min: null
+                    max: 25
+                    score: 30
+                    label: "low_utilization"
+                  - min: 25
+                    max: 45
+                    score: 15
+                    label: "medium_low_utilization"
+                  - min: 45
+                    max: 55
+                    score: 0
+                    label: "middle_utilization"
+                  - min: 55
+                    max: 75
+                    score: -15
+                    label: "medium_high_utilization"
+                  - min: 75
+                    max: null
+                    score: -30
+                    label: "high_utilization"
+                note: "山东地炼常减压开工率用周度原始百分比值直接分桶；若与前一条数据一致则0分。"
+            adjustments:
+              - feature_name: "shandong_refinery_load_news_adjustment_w1"
+                method: "bounded_numeric"
+                min: -5
+                max: 5
+                note: "Excel supply-side temporary load reduction / operational headline adjustment"
+          - group_code: "demand"
+            display_name: "Demand side / production-sales ratio"
+            weight_pct: 20
+            score_cap: 20
+            features:
+              - feature_name: "sales_production_ratio_w1_avg"
+                method: "bucket_score"
+                score_cap: 20
+                rules:
+                  - min: 110
+                    max: null
+                    score: 20
+                  - min: 100
+                    max: 110
+                    score: 10
+                  - min: 95
+                    max: 100
+                    score: 10
+                  - min: 90
+                    max: 95
+                    score: 5
+                  - min: 85
+                    max: 90
+                    score: 0
+                  - min: 70
+                    max: 85
+                    score: -10
+                  - min: null
+                    max: 70
+                    score: -20
+          - group_code: "inventory"
+            display_name: "Inventory side"
+            weight_pct: 15
+            score_cap: 15
+            features:
+              - feature_name: "shandong_product_inventory_percentile_weekly"
+                method: "bucket_score"
+                rules:
+                  - min: null
+                    max: 25
+                    score: 15
+                    label: "low_percentile"
+                  - min: 25
+                    max: 45
+                    score: 5
+                    label: "medium_low_percentile"
+                  - min: 45
+                    max: 55
+                    score: 0
+                    label: "middle_percentile"
+                  - min: 55
+                    max: 75
+                    score: -5
+                    label: "medium_high_percentile"
+                  - min: 75
+                    max: null
+                    score: -15
+                    label: "high_percentile"
+                note: "Excel: 山东贸易商库存+山东主营库存+山东独立炼厂库存求和后按分位数打分；缺任一组件则本项按缺失 0 分。"
+          - group_code: "policy"
+            display_name: "Policy expectation"
+            weight_pct: 5
+            score_cap: 5
+            features:
+              - feature_name: "price_window_expectation_weekly"
+                method: "enum_score"
+                rules:
+                  up_adjustment_expected: 5
+                  neutral: 0
+                  down_adjustment_expected: -5
+
+      M1:
+        display_name: "Next-month"
+        target: "next_month_market_price_bias"
+        score_range: [-100, 100]
+        factor_groups:
+          - group_code: "cost"
+            display_name: "Cost dimension"
+            weight_pct: 30
+            score_cap: 30
+            features:
+              - feature_name: "brent_change_usd_mom"
+                method: "bucket_score"
+                weight_pct_inside_group: 20
+                score_cap: 20
+                rules:
+                  - min: 5
+                    max: null
+                    score: 20
+                    label: "large_up"
+                  - min: 3
+                    max: 5
+                    score: 20
+                    label: "medium_large_up_clipped"
+                  - min: 1.5
+                    max: 3
+                    score: 10
+                    label: "medium_up"
+                  - min: 0.5
+                    max: 1.5
+                    score: 5
+                    label: "small_up"
+                  - min: -0.5
+                    max: 0.5
+                    score: 0
+                    label: "flat"
+                  - min: -1.5
+                    max: -0.5
+                    score: -5
+                    label: "small_down"
+                  - min: -3
+                    max: -1.5
+                    score: -10
+                    label: "medium_down"
+                  - min: -5
+                    max: -3
+                    score: -20
+                    label: "medium_large_down_clipped"
+                  - min: null
+                    max: -5
+                    score: -20
+                    label: "large_down"
+                note: "Excel updated: M1 Brent executable score is +/-20."
+          - group_code: "supply"
+            display_name: "Supply dimension"
+            weight_pct: 25
+            score_cap: 25
+            features:
+              - feature_name: "next_month_maintenance_plan"
+                method: "enum_score"
+                weight_pct_inside_group: 15
+                score_cap: 15
+                rules:
+                  concentrated_maintenance_supply_tight: 15
+                  stable_load: 0
+                  restart_and_supply_surplus: -15
+              - feature_name: "shandong_cdu_utilization_weekly"
+                method: "bucket_score"
+                weight_pct_inside_group: 10
+                score_cap: 10
+                rules:
+                  - min: null
+                    max: 25
+                    score: 10
+                    label: "low_utilization"
+                  - min: 25
+                    max: 45
+                    score: 5
+                    label: "medium_low_utilization"
+                  - min: 45
+                    max: 55
+                    score: 0
+                    label: "middle_utilization"
+                  - min: 55
+                    max: 75
+                    score: -5
+                    label: "medium_high_utilization"
+                  - min: 75
+                    max: null
+                    score: -10
+                    label: "high_utilization"
+                note: "山东地炼常减压开工率用周度原始百分比值直接分桶。"
+          - group_code: "demand"
+            display_name: "Demand dimension"
+            weight_pct: 15
+            score_cap: 15
+            features:
+              - feature_name: "monthly_seasonality_phase"
+                method: "calendar_month_band"
+                weight_pct_inside_group: 5
+                score_cap: 5
+                target_month_offset: 1
+                peak_months: [5, 6, 7, 8]
+                secondary_peak_months: [3, 4, 9]
+                secondary_off_months: [2]
+                off_months: [1, 10, 11, 12]
+                scores:
+                  peak: 5
+                  secondary_peak: 2
+                  neutral: 0
+                  secondary_off: -2
+                  "off": -5
+              - feature_name: "restocking_rhythm_monthly"
+                method: "enum_score"
+                weight_pct_inside_group: 5
+                score_cap: 5
+                rules:
+                  active_restocking: 5
+                  stable_small_lots: 0
+                  reduced_restocking: -5
+              - feature_name: "holiday_demand_delta_monthly"
+                method: "enum_score"
+                weight_pct_inside_group: 5
+                score_cap: 5
+                rules:
+                  more_holidays: 5
+                  unchanged: 0
+                  fewer_holidays: -5
+          - group_code: "inventory"
+            display_name: "Inventory dimension"
+            weight_pct: 20
+            score_cap: 20
+            features:
+              - feature_name: "refinery_inventory_monthly"
+                method: "bucket_score"
+                weight_pct_inside_group: 10
+                score_cap: 10
+                rules:
+                  - min: null
+                    max: 25
+                    score: 10
+                    label: "low_percentile"
+                  - min: 25
+                    max: 45
+                    score: 5
+                    label: "medium_low_percentile"
+                  - min: 45
+                    max: 55
+                    score: 0
+                    label: "middle_percentile"
+                  - min: 55
+                    max: 75
+                    score: -5
+                    label: "medium_high_percentile"
+                  - min: 75
+                    max: null
+                    score: -10
+                    label: "high_percentile"
+              - feature_name: "main_company_inventory_monthly"
+                method: "bucket_score"
+                weight_pct_inside_group: 10
+                score_cap: 10
+                rules:
+                  - min: null
+                    max: 25
+                    score: 10
+                    label: "low_percentile"
+                  - min: 25
+                    max: 45
+                    score: 5
+                    label: "medium_low_percentile"
+                  - min: 45
+                    max: 55
+                    score: 0
+                    label: "middle_percentile"
+                  - min: 55
+                    max: 75
+                    score: -5
+                    label: "medium_high_percentile"
+                  - min: 75
+                    max: null
+                    score: -10
+                    label: "high_percentile"
+                note: "Excel requires 山东主营销售公司库存. Current data is missing, so engine returns flat until this field is landed."
+          - group_code: "policy_sentiment"
+            display_name: "Policy and sentiment"
+            weight_pct: 10
+            score_cap: 10
+            features:
+              - feature_name: "price_window_expectation_monthly"
+                method: "enum_score"
+                weight_pct_inside_group: 5
+                score_cap: 5
+                rules:
+                  up_adjustment_expected: 5
+                  neutral: 0
+                  down_adjustment_expected: -5
+              - feature_name: "market_sentiment_monthly"
+                method: "enum_score"
+                weight_pct_inside_group: 5
+                score_cap: 5
+                rules:
+                  peak_season_bullish: 5
+                  neutral: 0
+                  bearish: -5
+        extreme_adjustment:
+          enabled: true
+          min: -10
+          max: 10
+          note: "Geopolitics, concentrated shutdowns, policy events"
+
+  - scorecard_code: "sd_diesel0"
+    display_name: "Shandong 0# diesel"
+    entity_code: "SD_DIESEL0"
+    product_family: "diesel"
+    horizons:
+      D1:
+        display_name: "T+1 daily"
+        target: "next_trading_day_market_price"
+        score_range: [-100, 100]
+        factor_groups:
+          - group_code: "cost"
+            display_name: "Cost side"
+            weight_pct: 40
+            score_cap: 40
+            features:
+              - feature_name: "brent_change_usd_d1"
+                method: "bucket_score"
+                rules:
+                  - min: 1.5
+                    max: null
+                    score: 40
+                  - min: 0.5
+                    max: 1.5
+                    score: 20
+                  - min: -0.5
+                    max: 0.5
+                    score: 0
+                  - min: -1.5
+                    max: -0.5
+                    score: -20
+                  - min: null
+                    max: -1.5
+                    score: -40
+            adjustments:
+              - feature_name: "diesel_crack_trend_d1"
+                method: "enum_score"
+                rules:
+                  expanded: 10
+                  flat: 0
+                  contracted: -10
+          - group_code: "supply"
+            display_name: "Supply side"
+            weight_pct: 15
+            score_cap: 15
+            primary_feature: "shandong_cdu_utilization_weekly"
+            method: "manual_bucket"
+            unresolved_thresholds: true
+            adjustments:
+              - feature_name: "shandong_refinery_load_news_adjustment_d1"
+                method: "bounded_numeric"
+                min: -5
+                max: 5
+          - group_code: "demand"
+            display_name: "Demand side / production-sales ratio"
+            weight_pct: 30
+            score_cap: 30
+            features:
+              - feature_name: "sales_production_ratio_d1"
+                method: "bucket_score"
+                rules:
+                  - min: 120
+                    max: null
+                    score: 30
+                  - min: 105
+                    max: 120
+                    score: 15
+                  - min: 100
+                    max: 105
+                    score: 5
+                  - min: 95
+                    max: 100
+                    score: 0
+                  - min: 85
+                    max: 95
+                    score: -5
+                  - min: 70
+                    max: 85
+                    score: -15
+                  - min: null
+                    max: 70
+                    score: -30
+          - group_code: "sentiment"
+            display_name: "Sentiment side"
+            weight_pct: 15
+            score_cap: 15
+            features:
+              - feature_name: "trader_sentiment_label_d1"
+                method: "enum_score"
+                rules:
+                  bullish_active: 15
+                  neutral_flat: 0
+                  bearish_selling: -15
+
+      D3:
+        display_name: "T+3 short-term"
+        target: "three_day_market_price_direction"
+        score_range: [-100, 100]
+        factor_groups:
+          - group_code: "cost"
+            display_name: "Cost side"
+            weight_pct: 35
+            score_cap: 35
+            features:
+              - feature_name: "brent_change_usd_d3"
+                method: "bucket_score"
+                rules:
+                  - min: 3
+                    max: null
+                    score: 35
+                  - min: 1
+                    max: 3
+                    score: 18
+                  - min: -1
+                    max: 1
+                    score: 0
+                  - min: -3
+                    max: -1
+                    score: -18
+                  - min: null
+                    max: -3
+                    score: -35
+          - group_code: "supply"
+            display_name: "Supply side"
+            weight_pct: 35
+            score_cap: 35
+            primary_feature: "shandong_cdu_utilization_weekly"
+            method: "manual_bucket"
+            unresolved_thresholds: true
+            adjustments:
+              - feature_name: "shandong_refinery_load_news_adjustment_d3"
+                method: "bounded_numeric"
+                min: -5
+                max: 5
+          - group_code: "demand"
+            display_name: "Demand side / production-sales ratio"
+            weight_pct: 20
+            score_cap: 20
+            features:
+              - feature_name: "sales_production_ratio_d3_avg"
+                method: "bucket_score"
+                rules:
+                  - min: 120
+                    max: null
+                    score: 20
+                  - min: 105
+                    max: 120
+                    score: 10
+                  - min: 100
+                    max: 105
+                    score: 5
+                  - min: 95
+                    max: 100
+                    score: 0
+                  - min: 85
+                    max: 95
+                    score: -5
+                  - min: 70
+                    max: 85
+                    score: -10
+                  - min: null
+                    max: 70
+                    score: -20
+          - group_code: "sentiment"
+            display_name: "Sentiment side"
+            weight_pct: 10
+            score_cap: 10
+            features:
+              - feature_name: "trader_sentiment_label_d3"
+                method: "enum_score"
+                rules:
+                  bullish_active: 10
+                  neutral_flat: 0
+                  bearish_selling: -10
+
+      W1:
+        display_name: "T+7 weekly"
+        target: "next_7d_market_price_direction"
+        score_range: [-100, 100]
+        factor_groups:
+          - group_code: "cost"
+            display_name: "Cost side"
+            weight_pct: 30
+            score_cap: 30
+            features:
+              - feature_name: "brent_change_usd_w1"
+                method: "bucket_score"
+                rules:
+                  - min: 5
+                    max: null
+                    score: 30
+                  - min: 0
+                    max: 5
+                    score: 15
+                  - min: -0.000001
+                    max: 0
+                    score: 0
+                  - min: -5
+                    max: -0.000001
+                    score: -15
+                  - min: null
+                    max: -5
+                    score: -30
+          - group_code: "supply"
+            display_name: "Supply side"
+            weight_pct: 30
+            score_cap: 30
+            primary_feature: "shandong_cdu_utilization_weekly"
+            method: "manual_bucket"
+            unresolved_thresholds: true
+          - group_code: "demand"
+            display_name: "Demand side / production-sales ratio"
+            weight_pct: 20
+            score_cap: 20
+            features:
+              - feature_name: "sales_production_ratio_w1_avg"
+                method: "bucket_score"
+                rules:
+                  - min: 120
+                    max: null
+                    score: 20
+                  - min: 105
+                    max: 120
+                    score: 10
+                  - min: 100
+                    max: 105
+                    score: 5
+                  - min: 95
+                    max: 100
+                    score: 0
+                  - min: 85
+                    max: 95
+                    score: -5
+                  - min: 70
+                    max: 85
+                    score: -10
+                  - min: null
+                    max: 70
+                    score: -20
+          - group_code: "inventory"
+            display_name: "Inventory side"
+            weight_pct: 15
+            score_cap: 15
+            features:
+              - feature_name: "inventory_trend_weekly"
+                method: "enum_score"
+                rules:
+                  low_and_drawing: 15
+                  stable_mid: 0
+                  high_and_building: -15
+          - group_code: "policy"
+            display_name: "Policy expectation"
+            weight_pct: 5
+            score_cap: 10
+            features:
+              - feature_name: "price_window_expectation_weekly"
+                method: "enum_score"
+                rules:
+                  strong_up_adjustment: 10
+                  neutral: 0
+                  strong_down_adjustment: -10
+
+      M1:
+        display_name: "Next-month"
+        target: "next_month_market_price_bias"
+        score_range: [-100, 100]
+        factor_groups:
+          - group_code: "cost"
+            display_name: "Cost dimension"
+            weight_pct: 30
+            score_cap: 30
+            features:
+              - feature_name: "brent_change_usd_mom"
+                method: "bucket_score"
+                weight_pct_inside_group: 20
+                score_cap: 20
+                rules:
+                  - min: 5
+                    max: null
+                    score: 20
+                  - min: 1
+                    max: 5
+                    score: 10
+                  - min: -1
+                    max: 1
+                    score: 0
+                  - min: -5
+                    max: -1
+                    score: -10
+                  - min: null
+                    max: -5
+                    score: -20
+              - feature_name: "diesel_crack_trend_monthly"
+                method: "enum_score"
+                weight_pct_inside_group: 10
+                score_cap: 10
+                rules:
+                  expanded: 10
+                  flat: 0
+                  contracted: -10
+          - group_code: "supply"
+            display_name: "Supply dimension"
+            weight_pct: 25
+            score_cap: 25
+            features:
+              - feature_name: "next_month_maintenance_plan"
+                method: "enum_score"
+                weight_pct_inside_group: 15
+                score_cap: 15
+                rules:
+                  concentrated_maintenance_supply_tight: 15
+                  stable_load: 0
+                  restart_and_supply_surplus: -15
+              - feature_name: "monthly_utilization_band"
+                method: "enum_score"
+                weight_pct_inside_group: 10
+                score_cap: 10
+                rules:
+                  low_utilization_tight_supply: 10
+                  mid_band_balanced: 0
+                  high_utilization_loose_supply: -10
+          - group_code: "demand"
+            display_name: "Demand dimension"
+            weight_pct: 25
+            score_cap: 25
+            features:
+              - feature_name: "monthly_seasonality_phase"
+                method: "calendar_month_band"
+                weight_pct_inside_group: 15
+                score_cap: 15
+                peak_months: [3, 4, 8, 9, 10]
+                neutral_months: [11, 12]
+                off_months: [1, 2, 5, 7]
+                scores:
+                  peak: 15
+                  neutral: 0
+                  "off": -15
+              - feature_name: "restocking_rhythm_monthly"
+                method: "enum_score"
+                weight_pct_inside_group: 5
+                score_cap: 5
+                rules:
+                  active_restocking: 5
+                  stable_small_lots: 0
+                  reduced_restocking: -5
+              - feature_name: "holiday_demand_delta_monthly"
+                method: "enum_score"
+                weight_pct_inside_group: 5
+                score_cap: 5
+                rules:
+                  more_holidays: 5
+                  unchanged: 0
+                  fewer_holidays: -5
+          - group_code: "inventory"
+            display_name: "Inventory dimension"
+            weight_pct: 10
+            score_cap: 10
+            features:
+              - feature_name: "refinery_inventory_monthly"
+                method: "enum_score"
+                weight_pct_inside_group: 5
+                score_cap: 5
+                rules:
+                  drawing: 5
+                  flat: 0
+                  building: -5
+              - feature_name: "social_inventory_cycle_position"
+                method: "enum_score"
+                weight_pct_inside_group: 5
+                score_cap: 5
+                rules:
+                  low_inventory_restock_room: 5
+                  balanced: 0
+                  high_inventory_pressure: -5
+          - group_code: "policy_sentiment"
+            display_name: "Policy and sentiment"
+            weight_pct: 10
+            score_cap: 10
+            features:
+              - feature_name: "price_window_expectation_monthly"
+                method: "enum_score"
+                weight_pct_inside_group: 5
+                score_cap: 5
+                rules:
+                  up_adjustment_expected: 5
+                  neutral: 0
+                  down_adjustment_expected: -5
+              - feature_name: "market_sentiment_monthly"
+                method: "enum_score"
+                weight_pct_inside_group: 5
+                score_cap: 5
+                rules:
+                  peak_season_bullish: 5
+                  neutral: 0
+                  bearish: -5
+        extreme_adjustment:
+          enabled: true
+          min: -10
+          max: 10
+          note: "Geopolitics, concentrated shutdowns, policy events"

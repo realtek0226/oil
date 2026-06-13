@@ -1,0 +1,1774 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>山东成品油研究工作台原型</title>
+  <!--
+    Assumptions:
+    1. This is a desktop-first hi-fi prototype for research, trading, and pricing teams.
+    2. All values are illustrative demo data, not live market truth.
+    3. The first screen is optimized for "30-second market judgment".
+  -->
+  <style>
+    :root {
+      --bg: #efede6;
+      --surface: #fbfaf6;
+      --surface-strong: #f4f1e8;
+      --ink: #1f2625;
+      --muted: #5f6a67;
+      --line: #d8d2c4;
+      --green: #2d7f67;
+      --green-soft: #d8ebe4;
+      --amber: #b87d2f;
+      --amber-soft: #efe4d1;
+      --red: #b75f4e;
+      --red-soft: #f1dfd8;
+      --teal: #4a6e69;
+      --slate: #52646a;
+      --shadow: 0 18px 40px rgba(31, 38, 37, 0.08);
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #f5f3ec 0%, #ece8dd 100%);
+      color: var(--ink);
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(12px);
+      background: rgba(245, 243, 236, 0.88);
+      border-bottom: 1px solid rgba(216, 210, 196, 0.9);
+    }
+
+    .topbar-inner {
+      max-width: 1520px;
+      margin: 0 auto;
+      padding: 16px 28px;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr auto;
+      gap: 20px;
+      align-items: center;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .brand-title {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .brand-subtitle {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .status-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      height: 34px;
+      padding: 0 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: rgba(251, 250, 246, 0.9);
+      border: 1px solid var(--line);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .pill strong {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .pill.alert {
+      background: var(--amber-soft);
+      border-color: rgba(184, 125, 47, 0.25);
+      color: #84581d;
+    }
+
+    .pill.alert::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--amber);
+      box-shadow: 0 0 0 0 rgba(184, 125, 47, 0.4);
+      animation: pulse 2s infinite;
+    }
+
+    .nav {
+      display: inline-flex;
+      gap: 6px;
+      padding: 4px;
+      border-radius: 999px;
+      background: rgba(251, 250, 246, 0.94);
+      border: 1px solid var(--line);
+      justify-self: end;
+    }
+
+    .nav button {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+    }
+
+    .nav button.active {
+      background: var(--ink);
+      color: #f6f3eb;
+    }
+
+    .nav button:hover {
+      transform: translateY(-1px);
+    }
+
+    main {
+      max-width: 1520px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    .view {
+      display: none;
+      flex-direction: column;
+      gap: 24px;
+      animation: fadeSlide 220ms ease;
+    }
+
+    .view.active {
+      display: flex;
+    }
+
+    .band {
+      background: rgba(251, 250, 246, 0.92);
+      border: 1px solid rgba(216, 210, 196, 0.88);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .band-header {
+      padding: 20px 22px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 16px;
+    }
+
+    .band-title {
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .band-meta {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.25fr 1fr;
+      min-height: 280px;
+    }
+
+    .hero-left,
+    .hero-right {
+      padding: 24px 24px 22px;
+    }
+
+    .hero-left {
+      border-right: 1px solid var(--line);
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .eyebrow {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .judgment-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .judgment {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 18px;
+      border-radius: var(--radius);
+      background: var(--surface-strong);
+      min-height: 140px;
+    }
+
+    .judgment .label {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .judgment .state {
+      font-size: 34px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .judgment .range {
+      font-size: 15px;
+      color: var(--ink);
+    }
+
+    .judgment .hint {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .mini-tag {
+      display: inline-flex;
+      align-items: center;
+      height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--muted);
+      border: 1px solid rgba(0, 0, 0, 0.04);
+    }
+
+    .up {
+      color: var(--green);
+    }
+
+    .flat {
+      color: var(--amber);
+    }
+
+    .down {
+      color: var(--red);
+    }
+
+    .driver-list {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .driver-item {
+      padding: 14px 16px;
+      background: rgba(255, 255, 255, 0.72);
+      border-top: 1px solid rgba(0, 0, 0, 0.04);
+    }
+
+    .driver-item strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 5px;
+    }
+
+    .driver-item span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .hero-right {
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 16px;
+      background: linear-gradient(180deg, rgba(244, 241, 232, 0.92), rgba(251, 250, 246, 0.92));
+    }
+
+    .metric-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      padding: 14px 14px 16px;
+      background: rgba(255, 255, 255, 0.78);
+      border-radius: var(--radius);
+      min-height: 96px;
+    }
+
+    .metric .k {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 10px;
+    }
+
+    .metric .v {
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .metric .d {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .signal-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .signal-box {
+      padding: 14px 16px;
+      background: rgba(255, 255, 255, 0.78);
+      border-radius: var(--radius);
+      min-height: 116px;
+    }
+
+    .signal-box .name {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .signal-box .value {
+      font-size: 26px;
+      font-weight: 700;
+    }
+
+    .signal-box .sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .hero-note {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .hero-note article {
+      padding: 14px 16px;
+      border-top: 1px solid rgba(0, 0, 0, 0.04);
+      background: rgba(255, 255, 255, 0.64);
+    }
+
+    .hero-note h4 {
+      margin: 0 0 8px;
+      font-size: 13px;
+    }
+
+    .hero-note p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 12px;
+    }
+
+    .chart-band {
+      padding-bottom: 16px;
+    }
+
+    .chart-wrap {
+      display: grid;
+      grid-template-columns: 1.45fr 1fr;
+      gap: 18px;
+      padding: 16px 22px 22px;
+      align-items: stretch;
+    }
+
+    .chart-surface,
+    .chart-side {
+      background: rgba(255, 255, 255, 0.76);
+      border-radius: var(--radius);
+      min-height: 320px;
+      border: 1px solid rgba(0, 0, 0, 0.04);
+    }
+
+    .chart-surface {
+      padding: 14px;
+    }
+
+    #priceCanvas {
+      width: 100%;
+      height: 292px;
+      display: block;
+    }
+
+    .chart-side {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .chain-row {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr 0.9fr;
+      gap: 8px;
+      align-items: center;
+      min-height: 42px;
+      border-top: 1px solid rgba(0, 0, 0, 0.05);
+      padding-top: 12px;
+    }
+
+    .chain-row:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .chain-row .place {
+      font-size: 13px;
+      color: var(--ink);
+    }
+
+    .chain-row .price {
+      font-size: 16px;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .chain-row .delta {
+      font-size: 12px;
+      text-align: right;
+    }
+
+    .grid-two {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 24px;
+    }
+
+    .map-wrap,
+    .factor-wrap,
+    .matrix-wrap,
+    .alert-wrap,
+    .brief-wrap,
+    .scenario-wrap {
+      padding: 18px 22px 22px;
+    }
+
+    .geo-board {
+      position: relative;
+      min-height: 390px;
+      background: linear-gradient(180deg, rgba(244, 241, 232, 0.9), rgba(251, 250, 246, 0.92));
+      border-radius: var(--radius);
+      border: 1px solid rgba(0, 0, 0, 0.04);
+      overflow: hidden;
+    }
+
+    .geo-board::before {
+      content: "";
+      position: absolute;
+      inset: 20px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(74, 110, 105, 0.05) 0, rgba(74, 110, 105, 0.05) 40%, transparent 40%),
+        radial-gradient(circle at 50% 50%, rgba(74, 110, 105, 0.04) 0, rgba(74, 110, 105, 0.04) 62%, transparent 62%);
+    }
+
+    .region {
+      position: absolute;
+      min-width: 108px;
+      padding: 14px 14px 12px;
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid rgba(0, 0, 0, 0.05);
+      box-shadow: 0 10px 24px rgba(31, 38, 37, 0.06);
+      cursor: pointer;
+      transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+    }
+
+    .region:hover,
+    .region.active {
+      transform: translateY(-2px);
+      border-color: rgba(45, 127, 103, 0.34);
+      box-shadow: 0 16px 30px rgba(31, 38, 37, 0.1);
+    }
+
+    .region strong {
+      display: block;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+
+    .region span {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .region.sd {
+      top: 126px;
+      left: 230px;
+      background: var(--green-soft);
+      border-color: rgba(45, 127, 103, 0.28);
+    }
+
+    .region.bth { top: 72px; left: 128px; }
+    .region.henan { top: 215px; left: 128px; }
+    .region.jiangsu { top: 218px; left: 330px; }
+    .region.shanghai { top: 286px; left: 396px; }
+    .region.zhejiang { top: 325px; left: 314px; }
+
+    .flow-line {
+      position: absolute;
+      height: 2px;
+      background: linear-gradient(90deg, rgba(45, 127, 103, 0.1), rgba(45, 127, 103, 0.6));
+      transform-origin: left center;
+      opacity: 0.75;
+    }
+
+    .line-bth { width: 112px; left: 200px; top: 140px; transform: rotate(-28deg); }
+    .line-hn { width: 112px; left: 204px; top: 228px; transform: rotate(143deg); }
+    .line-js { width: 108px; left: 312px; top: 208px; transform: rotate(21deg); }
+    .line-sh { width: 164px; left: 308px; top: 254px; transform: rotate(41deg); }
+    .line-zj { width: 146px; left: 302px; top: 286px; transform: rotate(62deg); }
+
+    .region-detail {
+      margin-top: 16px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.78);
+      border-radius: var(--radius);
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .region-detail .key {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .region-detail .val {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .factor-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .factor-row {
+      display: grid;
+      grid-template-columns: 110px 1fr 82px 70px;
+      gap: 12px;
+      align-items: center;
+      min-height: 42px;
+    }
+
+    .factor-row .fname {
+      font-size: 13px;
+    }
+
+    .bar {
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(82, 100, 106, 0.12);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bar > span {
+      position: absolute;
+      inset: 0 auto 0 0;
+      border-radius: 999px;
+    }
+
+    .bar .pos { background: linear-gradient(90deg, #8cc0ae, var(--green)); }
+    .bar .neg { background: linear-gradient(90deg, #d9a398, var(--red)); }
+    .factor-row .score {
+      font-weight: 700;
+      text-align: right;
+    }
+
+    .factor-row .lag {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: right;
+    }
+
+    .route-matrix {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 13px;
+    }
+
+    .route-matrix th,
+    .route-matrix td {
+      padding: 12px 10px;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .route-matrix th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .heat {
+      display: inline-flex;
+      min-width: 62px;
+      justify-content: center;
+      align-items: center;
+      height: 30px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .heat.high { background: var(--green-soft); color: var(--green); }
+    .heat.mid { background: var(--amber-soft); color: #855a23; }
+    .heat.low { background: var(--red-soft); color: var(--red); }
+
+    .route-cards {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .route-card {
+      min-height: 142px;
+      padding: 16px;
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(0, 0, 0, 0.04);
+    }
+
+    .route-card h4,
+    .alert-card h4,
+    .brief-card h4,
+    .scenario-box h4 {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+
+    .route-card p,
+    .brief-card p,
+    .scenario-box p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .alert-grid {
+      display: grid;
+      grid-template-columns: 0.95fr 1.05fr;
+      gap: 24px;
+    }
+
+    .alert-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .alert-card {
+      padding: 16px 18px;
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.82);
+      border-left: 4px solid var(--amber);
+    }
+
+    .alert-card.red { border-left-color: var(--red); }
+    .alert-card.green { border-left-color: var(--green); }
+
+    .alert-card .meta,
+    .brief-card .meta {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 8px;
+    }
+
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-left: 8px;
+      position: relative;
+    }
+
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 7px;
+      top: 4px;
+      bottom: 4px;
+      width: 2px;
+      background: rgba(82, 100, 106, 0.18);
+    }
+
+    .timeline-item {
+      position: relative;
+      padding: 4px 0 4px 22px;
+    }
+
+    .timeline-item::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 10px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 4px solid var(--amber);
+    }
+
+    .timeline-item.red::before { border-color: var(--red); }
+    .timeline-item.green::before { border-color: var(--green); }
+
+    .timeline-item .time {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .timeline-item .title {
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .timeline-item .desc {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .brief-grid {
+      display: grid;
+      grid-template-columns: 0.92fr 1.08fr;
+      gap: 24px;
+    }
+
+    .brief-card {
+      padding: 18px;
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.82);
+      min-height: 176px;
+    }
+
+    .brief-card ul {
+      margin: 8px 0 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 13px;
+    }
+
+    .brief-body {
+      padding: 18px 22px 4px;
+      line-height: 1.75;
+      color: var(--ink);
+      font-size: 14px;
+      background: rgba(255, 255, 255, 0.78);
+      border-radius: var(--radius);
+    }
+
+    .brief-body h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+    }
+
+    .brief-body p {
+      margin: 0 0 14px;
+    }
+
+    .scenario-layout {
+      display: grid;
+      grid-template-columns: 0.84fr 1.16fr;
+      gap: 24px;
+    }
+
+    .scenario-box {
+      padding: 18px;
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(0, 0, 0, 0.04);
+    }
+
+    .control-group {
+      margin-top: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .control {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .control-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+    }
+
+    .control output {
+      font-weight: 700;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--green);
+    }
+
+    .result-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .chat-thread {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .bubble {
+      max-width: 82%;
+      padding: 12px 14px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .bubble.user {
+      align-self: flex-end;
+      background: var(--ink);
+      color: #f6f3eb;
+    }
+
+    .bubble.system {
+      align-self: flex-start;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(0, 0, 0, 0.05);
+      color: var(--ink);
+    }
+
+    .scenario-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 13px;
+    }
+
+    .scenario-table td,
+    .scenario-table th {
+      padding: 10px 0;
+      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      text-align: left;
+    }
+
+    .scenario-table th {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .scenario-foot {
+      margin-top: 14px;
+      padding: 14px 16px;
+      background: var(--surface-strong);
+      border-radius: var(--radius);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(184, 125, 47, 0.45); }
+      70% { box-shadow: 0 0 0 10px rgba(184, 125, 47, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(184, 125, 47, 0); }
+    }
+
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 1260px) {
+      .topbar-inner,
+      .hero,
+      .chart-wrap,
+      .grid-two,
+      .alert-grid,
+      .brief-grid,
+      .scenario-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .nav {
+        justify-self: start;
+        flex-wrap: wrap;
+      }
+
+      .metric-strip,
+      .signal-grid,
+      .driver-list,
+      .route-cards,
+      .hero-note,
+      .region-detail,
+      .result-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .topbar-inner,
+      main {
+        padding: 16px;
+      }
+
+      .metric-strip,
+      .signal-grid,
+      .driver-list,
+      .route-cards,
+      .hero-note,
+      .region-detail,
+      .result-strip,
+      .judgment-row {
+        grid-template-columns: 1fr;
+      }
+
+      .factor-row {
+        grid-template-columns: 1fr;
+      }
+
+      .region {
+        min-width: 92px;
+      }
+
+      .brand-title {
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="brand-title">山东成品油研究工作台</div>
+          <div class="brand-subtitle">研究主链：山东地炼出厂价 -> 主营批发价 -> 区域到站/落地价</div>
+        </div>
+        <div class="status-row">
+          <div class="pill"><strong>演示模式</strong> 静态样例数据</div>
+          <div class="pill"><strong>快照</strong> <span id="clockText">2026-05-29 08:12</span></div>
+          <div class="pill alert"><strong>橙色预警</strong> 山东两家炼厂降负 + 东向运费抬升</div>
+        </div>
+        <nav class="nav" aria-label="工作台视图切换">
+          <button class="active" data-view="overview">研究总览</button>
+          <button data-view="regions">区域传导</button>
+          <button data-view="alerts">预警中心</button>
+          <button data-view="briefing">晨报</button>
+          <button data-view="scenario">再预测</button>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="view active" id="view-overview">
+        <div class="band hero">
+          <div class="hero-left">
+            <div>
+              <div class="eyebrow">Today Market Judgment</div>
+              <div class="band-title">今晨判断以山东现货为主，不用全国均价掩盖区域结构</div>
+            </div>
+            <div class="judgment-row">
+              <article class="judgment">
+                <div class="label">山东 92# 汽油</div>
+                <div class="state up">偏强</div>
+                <div class="range">D+1 预测点位 6885 元/吨，区间 6840 - 6910</div>
+                <div class="hint">
+                  <span class="mini-tag">成本 +22</span>
+                  <span class="mini-tag">供给 +16</span>
+                  <span class="mini-tag">需求 +9</span>
+                </div>
+              </article>
+              <article class="judgment">
+                <div class="label">山东 0# 柴油</div>
+                <div class="state flat">震荡偏强</div>
+                <div class="range">D+1 预测点位 7020 元/吨，区间 6970 - 7060</div>
+                <div class="hint">
+                  <span class="mini-tag">物流 +18</span>
+                  <span class="mini-tag">库存 -8</span>
+                  <span class="mini-tag">事件 +11</span>
+                </div>
+              </article>
+            </div>
+            <div class="driver-list">
+              <div class="driver-item">
+                <strong>主驱动 01</strong>
+                <span>Brent 日报维持偏强，中游成本锚未松。</span>
+              </div>
+              <div class="driver-item">
+                <strong>主驱动 02</strong>
+                <span>山东两家炼厂临时降负，汽柴现货偏紧。</span>
+              </div>
+              <div class="driver-item">
+                <strong>主驱动 03</strong>
+                <span>东向运费抬升，江苏/上海落地价差扩大。</span>
+              </div>
+            </div>
+          </div>
+          <div class="hero-right">
+            <div class="metric-strip">
+              <div class="metric">
+                <div class="k">Brent</div>
+                <div class="v">82.36</div>
+                <div class="d up">+0.56 日内偏强</div>
+              </div>
+              <div class="metric">
+                <div class="k">山东地炼 92#</div>
+                <div class="v">6848</div>
+                <div class="d up">+38 较昨收</div>
+              </div>
+              <div class="metric">
+                <div class="k">山东地炼 0#</div>
+                <div class="v">6992</div>
+                <div class="d up">+26 较昨收</div>
+              </div>
+              <div class="metric">
+                <div class="k">山东主营批发</div>
+                <div class="v">7068</div>
+                <div class="d flat">≈ 资源偏紧</div>
+              </div>
+            </div>
+            <div class="signal-grid">
+              <div class="signal-box">
+                <div class="name">调价窗口</div>
+                <div class="value">第 5 / 10 个工作日</div>
+                <div class="sub">预期上调 210-240 元/吨，汽油强于柴油。</div>
+              </div>
+              <div class="signal-box">
+                <div class="name">区域套利</div>
+                <div class="value">山东 -> 河南 打开</div>
+                <div class="sub">净回报 +58 元/吨，东向运费抬升压缩上海窗口。</div>
+              </div>
+              <div class="signal-box">
+                <div class="name">库存状态</div>
+                <div class="value">柴油中性偏高</div>
+                <div class="sub">汽油库存回落更快，柴油需观察终端承接。</div>
+              </div>
+              <div class="signal-box">
+                <div class="name">预警动作</div>
+                <div class="value">09:30 前复核</div>
+                <div class="sub">橙色事件禁止自动签发强结论，需值班研究员确认。</div>
+              </div>
+            </div>
+            <div class="hero-note">
+              <article>
+                <h4>晨报状态</h4>
+                <p>07:28 已生成 v1 草稿，等待研究员签发。核心口径与昨晚收盘复盘一致。</p>
+              </article>
+              <article>
+                <h4>再预测状态</h4>
+                <p>08:05 已基于“东向运费 +30”重算一版，江苏和上海落地判断下修一档。</p>
+              </article>
+            </div>
+          </div>
+        </div>
+
+        <div class="band chart-band">
+          <div class="band-header">
+            <div class="band-title">山东价格主链</div>
+            <div class="band-meta">主图展示：历史实价 + 当日预测区间 + 事件标注</div>
+          </div>
+          <div class="chart-wrap">
+            <div class="chart-surface">
+              <canvas id="priceCanvas" width="840" height="292" aria-label="山东主链价格图"></canvas>
+            </div>
+            <div class="chart-side">
+              <div class="band-title" style="font-size:16px;">关键链路拆解</div>
+              <div class="chain-row">
+                <div class="place">山东地炼 92#</div>
+                <div class="price">6848</div>
+                <div class="delta up">+38</div>
+              </div>
+              <div class="chain-row">
+                <div class="place">山东主营 92#</div>
+                <div class="price">6915</div>
+                <div class="delta up">+24</div>
+              </div>
+              <div class="chain-row">
+                <div class="place">河南到站 92#</div>
+                <div class="price">7018</div>
+                <div class="delta up">+42</div>
+              </div>
+              <div class="chain-row">
+                <div class="place">江苏到站 92#</div>
+                <div class="price">7086</div>
+                <div class="delta flat">+15</div>
+              </div>
+              <div class="chain-row">
+                <div class="place">近似裂解价差</div>
+                <div class="price">853</div>
+                <div class="delta up">+21</div>
+              </div>
+              <div class="chain-row">
+                <div class="place">山东 -> 河南净回报</div>
+                <div class="price">58</div>
+                <div class="delta up">打开</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-two">
+          <div class="band">
+            <div class="band-header">
+              <div class="band-title">区域传导热力图</div>
+              <div class="band-meta">点击区域查看价差、运费、时滞、净回报</div>
+            </div>
+            <div class="map-wrap">
+              <div class="geo-board">
+                <div class="flow-line line-bth"></div>
+                <div class="flow-line line-hn"></div>
+                <div class="flow-line line-js"></div>
+                <div class="flow-line line-sh"></div>
+                <div class="flow-line line-zj"></div>
+
+                <button class="region bth" data-region="京津冀" type="button">
+                  <strong>京津冀</strong>
+                  <span>92# 净回报 +22</span>
+                  <span>时滞 1.3 天</span>
+                </button>
+                <button class="region sd active" data-region="山东" type="button">
+                  <strong>山东</strong>
+                  <span>主链核心样本池</span>
+                  <span>地炼 -> 主营 -> 外发</span>
+                </button>
+                <button class="region henan" data-region="河南" type="button">
+                  <strong>河南</strong>
+                  <span>柴油净回报 +58</span>
+                  <span>时滞 0.8 天</span>
+                </button>
+                <button class="region jiangsu" data-region="江苏" type="button">
+                  <strong>江苏</strong>
+                  <span>92# 净回报 +11</span>
+                  <span>运费抬升</span>
+                </button>
+                <button class="region shanghai" data-region="上海" type="button">
+                  <strong>上海</strong>
+                  <span>窗口收窄</span>
+                  <span>到站价仍高</span>
+                </button>
+                <button class="region zhejiang" data-region="浙江" type="button">
+                  <strong>浙江</strong>
+                  <span>终端偏强</span>
+                  <span>汽油承接稳定</span>
+                </button>
+              </div>
+              <div class="region-detail" id="regionDetail">
+                <div>
+                  <div class="key">当前区域</div>
+                  <div class="val" id="detailRegion">山东</div>
+                </div>
+                <div>
+                  <div class="key">主导品种</div>
+                  <div class="val" id="detailProduct">92# / 0#</div>
+                </div>
+                <div>
+                  <div class="key">净回报</div>
+                  <div class="val" id="detailReturn">-</div>
+                </div>
+                <div>
+                  <div class="key">传导时滞</div>
+                  <div class="val" id="detailLag">-</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="band">
+            <div class="band-header">
+              <div class="band-title">关键驱动因子</div>
+              <div class="band-meta">方向、强度、时滞一屏可读</div>
+            </div>
+            <div class="factor-wrap">
+              <div class="factor-stack">
+                <div class="factor-row">
+                  <div class="fname">Brent</div>
+                  <div class="bar"><span class="pos" style="width: 72%;"></span></div>
+                  <div class="score up">+22</div>
+                  <div class="lag">T+0</div>
+                </div>
+                <div class="factor-row">
+                  <div class="fname">调价预期</div>
+                  <div class="bar"><span class="pos" style="width: 64%;"></span></div>
+                  <div class="score up">+18</div>
+                  <div class="lag">T+1</div>
+                </div>
+                <div class="factor-row">
+                  <div class="fname">炼厂降负</div>
+                  <div class="bar"><span class="pos" style="width: 58%;"></span></div>
+                  <div class="score up">+16</div>
+                  <div class="lag">T+0</div>
+                </div>
+                <div class="factor-row">
+                  <div class="fname">库存</div>
+                  <div class="bar"><span class="neg" style="width: 26%;"></span></div>
+                  <div class="score down">-8</div>
+                  <div class="lag">T+1</div>
+                </div>
+                <div class="factor-row">
+                  <div class="fname">运费</div>
+                  <div class="bar"><span class="pos" style="width: 46%;"></span></div>
+                  <div class="score up">+12</div>
+                  <div class="lag">T+0</div>
+                </div>
+                <div class="factor-row">
+                  <div class="fname">重卡流量</div>
+                  <div class="bar"><span class="pos" style="width: 38%;"></span></div>
+                  <div class="score up">+9</div>
+                  <div class="lag">T+1</div>
+                </div>
+                <div class="factor-row">
+                  <div class="fname">港口扰动</div>
+                  <div class="bar"><span class="pos" style="width: 41%;"></span></div>
+                  <div class="score up">+11</div>
+                  <div class="lag">T+0</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-regions">
+        <div class="band">
+          <div class="band-header">
+            <div class="band-title">山东 -> 重点区域传导矩阵</div>
+            <div class="band-meta">落地成本和套利窗口不再藏在研究正文里</div>
+          </div>
+          <div class="matrix-wrap">
+            <table class="route-matrix">
+              <thead>
+                <tr>
+                  <th>区域</th>
+                  <th>92# 到站价</th>
+                  <th>0# 到站价</th>
+                  <th>净回报</th>
+                  <th>时滞</th>
+                  <th>窗口状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>京津冀</td>
+                  <td>7008</td>
+                  <td>7142</td>
+                  <td>+22</td>
+                  <td>1.3 天</td>
+                  <td><span class="heat mid">观察</span></td>
+                </tr>
+                <tr>
+                  <td>河南</td>
+                  <td>7018</td>
+                  <td>7176</td>
+                  <td>+58</td>
+                  <td>0.8 天</td>
+                  <td><span class="heat high">打开</span></td>
+                </tr>
+                <tr>
+                  <td>江苏</td>
+                  <td>7086</td>
+                  <td>7215</td>
+                  <td>+11</td>
+                  <td>1.5 天</td>
+                  <td><span class="heat mid">收窄</span></td>
+                </tr>
+                <tr>
+                  <td>上海</td>
+                  <td>7128</td>
+                  <td>7242</td>
+                  <td>-6</td>
+                  <td>1.8 天</td>
+                  <td><span class="heat low">关闭</span></td>
+                </tr>
+                <tr>
+                  <td>浙江</td>
+                  <td>7104</td>
+                  <td>7236</td>
+                  <td>+7</td>
+                  <td>1.7 天</td>
+                  <td><span class="heat mid">边缘</span></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div class="route-cards">
+              <article class="route-card">
+                <h4>优先流向：河南</h4>
+                <p>柴油净回报领先，且传导时滞最短。若午后山东现货再推涨，河南窗口仍有延续概率。</p>
+              </article>
+              <article class="route-card">
+                <h4>谨慎流向：江苏</h4>
+                <p>名义价格仍高，但运费抬升后边际收益收窄。适合锁短途，不适合放大敞口。</p>
+              </article>
+              <article class="route-card">
+                <h4>不追流向：上海</h4>
+                <p>终端价高并不等于净回报高。扣除运费、票据和账期成本后，当前窗口已接近关闭。</p>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-alerts">
+        <div class="band">
+          <div class="band-header">
+            <div class="band-title">预警中心</div>
+            <div class="band-meta">事件级别、影响路径、人工复核状态统一管理</div>
+          </div>
+          <div class="alert-wrap">
+            <div class="alert-grid">
+              <div class="alert-list">
+                <article class="alert-card red">
+                  <div class="meta">橙色预警 · 08:03 · 需人工复核</div>
+                  <h4>山东两家地炼临时降负</h4>
+                  <p>预计先影响 92# 现货，随后通过山东出厂价传导至河南与苏北。模型已触发增量重算。</p>
+                </article>
+                <article class="alert-card">
+                  <div class="meta">黄色预警 · 07:48 · 自动入池</div>
+                  <h4>东向汽运报价单日抬升 30 元/吨</h4>
+                  <p>上海与浙江方向落地成本上调，跨区净回报边际下滑。</p>
+                </article>
+                <article class="alert-card green">
+                  <div class="meta">蓝色预警 · 06:55 · 已确认</div>
+                  <h4>调价窗口进入第 5 个工作日</h4>
+                  <p>对晨报口径影响明确，但不改变山东主链的短线供需判断。</p>
+                </article>
+              </div>
+              <div class="timeline">
+                <div class="timeline-item red">
+                  <div class="time">08:05</div>
+                  <div class="title">事件重算完成</div>
+                  <div class="desc">山东 92# D+1 点位上修 18 元/吨，柴油区间上沿抬升 20 元/吨。</div>
+                </div>
+                <div class="timeline-item">
+                  <div class="time">08:12</div>
+                  <div class="title">人工复核待签发</div>
+                  <div class="desc">值班研究员需在 09:30 前确认炼厂停工持续时间和主营投放强度。</div>
+                </div>
+                <div class="timeline-item green">
+                  <div class="time">08:18</div>
+                  <div class="title">晨报草稿同步更新</div>
+                  <div class="desc">报告正文已自动替换新增风险提示，并标记当前版本为 v1.2。</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-briefing">
+        <div class="band">
+          <div class="band-header">
+            <div class="band-title">晨报中心</div>
+            <div class="band-meta">统一口径、版本可追、与再预测共用同一事实底座</div>
+          </div>
+          <div class="brief-wrap">
+            <div class="brief-grid">
+              <article class="brief-card">
+                <div class="meta">07:28 自动生成 · v1 草稿</div>
+                <h4>今日结论摘要</h4>
+                <ul>
+                  <li>山东 92# 偏强，地炼主链先涨于主营批发。</li>
+                  <li>0# 柴油震荡偏强，物流扰动放大东向成本。</li>
+                  <li>河南窗口继续打开，江苏和上海窗口边际收窄。</li>
+                  <li>橙色预警要求 09:30 前人工签发。</li>
+                </ul>
+              </article>
+              <article class="brief-card">
+                <div class="meta">与昨日差异</div>
+                <h4>变化最大的三处</h4>
+                <ul>
+                  <li>92# D+1 点位上修 26 元/吨。</li>
+                  <li>东向运费进入主驱动前三。</li>
+                  <li>上海方向从“边缘打开”切回“接近关闭”。</li>
+                </ul>
+              </article>
+            </div>
+            <div class="brief-body">
+              <h3>晨报正文节选</h3>
+              <p>今晨山东成品油现货判断继续以地炼主链为核心。Brent 偏强与调价预期抬升提供成本支撑，但真正推动今日早盘情绪转强的，是山东两家炼厂降负后的供给收缩信号。汽油主链反应快于柴油，92# 预计先于主营批发价完成上修。</p>
+              <p>区域传导方面，河南方向仍是当前最优流向，净回报和时滞结构均优于东向。江苏与上海名义价格仍高，但东向汽运报价上行后，窗口边际已明显收窄。若午后主营资源继续偏紧，则需重新评估苏北落地价的承接能力。</p>
+              <p>风险方面，当前橙色预警集中在供给侧与物流侧共振，系统已完成增量重算，但正式口径仍需人工复核后签发。对外统一建议仍保持“汽强于柴、河南优于东向”的判断框架。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-scenario">
+        <div class="band">
+          <div class="band-header">
+            <div class="band-title">对话式再预测</div>
+            <div class="band-meta">不是自由聊天，而是带参数的情景重算入口</div>
+          </div>
+          <div class="scenario-wrap">
+            <div class="scenario-layout">
+              <div class="scenario-box">
+                <h4>可控假设</h4>
+                <p>修改关键假设后，系统重算山东 92#、0# 和区域落地判断。</p>
+                <div class="control-group">
+                  <label class="control">
+                    <div class="control-row"><span>Brent 变动</span><output id="brentOut">+1.0 美元/桶</output></div>
+                    <input id="brentRange" type="range" min="-3" max="3" step="0.5" value="1">
+                  </label>
+                  <label class="control">
+                    <div class="control-row"><span>东向运费变动</span><output id="freightOut">+20 元/吨</output></div>
+                    <input id="freightRange" type="range" min="-50" max="80" step="10" value="20">
+                  </label>
+                  <label class="control">
+                    <div class="control-row"><span>炼厂降负强度</span><output id="outageOut">2 档</output></div>
+                    <input id="outageRange" type="range" min="0" max="3" step="1" value="2">
+                  </label>
+                  <label class="control">
+                    <div class="control-row"><span>柴油终端需求</span><output id="demandOut">+1 档</output></div>
+                    <input id="demandRange" type="range" min="-2" max="2" step="1" value="1">
+                  </label>
+                </div>
+              </div>
+
+              <div class="scenario-box">
+                <h4>重算结果</h4>
+                <div class="result-strip">
+                  <div class="metric">
+                    <div class="k">山东 92# D+1</div>
+                    <div class="v" id="gas92Point">6893</div>
+                    <div class="d" id="gas92Range">6848 - 6918</div>
+                  </div>
+                  <div class="metric">
+                    <div class="k">山东 0# D+1</div>
+                    <div class="v" id="dieselPoint">7039</div>
+                    <div class="d" id="dieselRange">6986 - 7076</div>
+                  </div>
+                  <div class="metric">
+                    <div class="k">河南净回报</div>
+                    <div class="v" id="henanReturn">+64</div>
+                    <div class="d" id="henanLabel">窗口扩大</div>
+                  </div>
+                </div>
+
+                <table class="scenario-table">
+                  <thead>
+                    <tr>
+                      <th>对象</th>
+                      <th>基线</th>
+                      <th>新情景</th>
+                      <th>变化</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>山东 92#</td>
+                      <td>6885</td>
+                      <td id="rowGas92">6893</td>
+                      <td id="rowGas92Delta" class="up">+8</td>
+                    </tr>
+                    <tr>
+                      <td>山东 0#</td>
+                      <td>7020</td>
+                      <td id="rowDiesel">7039</td>
+                      <td id="rowDieselDelta" class="up">+19</td>
+                    </tr>
+                    <tr>
+                      <td>上海方向</td>
+                      <td>接近关闭</td>
+                      <td id="rowShanghai">关闭</td>
+                      <td id="rowShanghaiDelta" class="down">-1 档</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div class="chat-thread">
+                  <div class="bubble user">如果东向运费再涨 20，山东 0# 柴油和江苏、上海方向怎么变？</div>
+                  <div class="bubble system" id="scenarioNarrative">
+                    当前情景下，山东 0# 柴油 D+1 点位上修 19 元/吨。东向运费继续抬升后，江苏方向仍可维持边际正收益，但上海方向窗口收回到关闭状态，不建议主动放大东向敞口。
+                  </div>
+                </div>
+
+                <div class="scenario-foot">
+                  所有再预测都应该沉淀为 `scenario_run`，绑定 `run_id`、`data_snapshot_id`、`feature_version` 和 `operator`，否则不能进入正式研究留痕。
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const buttons = document.querySelectorAll(".nav button");
+    const views = document.querySelectorAll(".view");
+    const regionButtons = document.querySelectorAll(".region");
+    const clockText = document.getElementById("clockText");
+
+    const regionMeta = {
+      "山东": { product: "92# / 0#", net: "-", lag: "-" },
+      "京津冀": { product: "92# 主导", net: "+22 元/吨", lag: "1.3 天" },
+      "河南": { product: "0# 柴油主导", net: "+58 元/吨", lag: "0.8 天" },
+      "江苏": { product: "92# 偏主导", net: "+11 元/吨", lag: "1.5 天" },
+      "上海": { product: "高价低净回报", net: "-6 元/吨", lag: "1.8 天" },
+      "浙江": { product: "92# 稳定承接", net: "+7 元/吨", lag: "1.7 天" }
+    };
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        buttons.forEach((item) => item.classList.remove("active"));
+        views.forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        document.getElementById(`view-${button.dataset.view}`).classList.add("active");
+      });
+    });
+
+    regionButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        regionButtons.forEach((item) => item.classList.remove("active"));
+        button.classList.add("active");
+        const meta = regionMeta[button.dataset.region];
+        document.getElementById("detailRegion").textContent = button.dataset.region;
+        document.getElementById("detailProduct").textContent = meta.product;
+        document.getElementById("detailReturn").textContent = meta.net;
+        document.getElementById("detailLag").textContent = meta.lag;
+      });
+    });
+
+    function updateClock() {
+      const base = new Date("2026-05-29T08:12:00+08:00");
+      const now = new Date(base.getTime() + Math.floor(Date.now() / 60000 % 18) * 60000);
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const d = String(now.getDate()).padStart(2, "0");
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mm = String(now.getMinutes()).padStart(2, "0");
+      clockText.textContent = `${y}-${m}-${d} ${hh}:${mm}`;
+    }
+
+    function drawChart() {
+      const canvas = document.getElementById("priceCanvas");
+      const ctx = canvas.getContext("2d");
+      const width = canvas.width;
+      const height = canvas.height;
+      const padding = { top: 18, right: 26, bottom: 34, left: 48 };
+      const chartW = width - padding.left - padding.right;
+      const chartH = height - padding.top - padding.bottom;
+      const history = [6730, 6742, 6768, 6786, 6798, 6812, 6830, 6822, 6848];
+      const forecastMid = [6860, 6885, 6902];
+      const forecastLow = [6820, 6840, 6856];
+      const forecastHigh = [6890, 6910, 6938];
+      const all = history.concat(forecastLow, forecastHigh);
+      const min = Math.min(...all) - 20;
+      const max = Math.max(...all) + 20;
+      const pointGap = chartW / 11;
+
+      const x = (index) => padding.left + index * pointGap;
+      const y = (value) => padding.top + ((max - value) / (max - min)) * chartH;
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = "#fffdf8";
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.strokeStyle = "rgba(82, 100, 106, 0.15)";
+      ctx.lineWidth = 1;
+      ctx.font = "12px Microsoft YaHei";
+      ctx.fillStyle = "#5f6a67";
+
+      for (let i = 0; i <= 4; i += 1) {
+        const level = min + ((max - min) / 4) * i;
+        const lineY = y(level);
+        ctx.beginPath();
+        ctx.moveTo(padding.left, lineY);
+        ctx.lineTo(width - padding.right, lineY);
+        ctx.stroke();
+        ctx.fillText(String(Math.round(level)), 6, lineY + 4);
+      }
+
+      for (let i = 0; i < 12; i += 1) {
+        const label = i < 9 ? `05/${21 + i}` : i === 9 ? "D+0" : i === 10 ? "D+1" : "D+3";
+        ctx.fillText(label, x(i) - 12, height - 10);
+      }
+
+      ctx.fillStyle = "rgba(184, 125, 47, 0.12)";
+      ctx.beginPath();
+      ctx.moveTo(x(8), y(forecastLow[0]));
+      forecastLow.forEach((value, idx) => ctx.lineTo(x(8 + idx), y(value)));
+      for (let idx = forecastHigh.length - 1; idx >= 0; idx -= 1) {
+        ctx.lineTo(x(8 + idx), y(forecastHigh[idx]));
+      }
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = "#2d7f67";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      history.forEach((value, idx) => {
+        if (idx === 0) ctx.moveTo(x(idx), y(value));
+        else ctx.lineTo(x(idx), y(value));
+      });
+      ctx.stroke();
+
+      ctx.strokeStyle = "#b87d2f";
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      forecastMid.forEach((value, idx) => {
+        if (idx === 0) ctx.moveTo(x(8 + idx), y(value));
+        else ctx.lineTo(x(8 + idx), y(value));
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = "#2d7f67";
+      history.forEach((value, idx) => {
+        ctx.beginPath();
+        ctx.arc(x(idx), y(value), 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      ctx.fillStyle = "#b87d2f";
+      forecastMid.forEach((value, idx) => {
+        ctx.beginPath();
+        ctx.arc(x(8 + idx), y(value), 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      ctx.fillStyle = "#1f2625";
+      ctx.fillText("山东 92# 地炼主链", padding.left, 14);
+
+      ctx.fillStyle = "#b75f4e";
+      ctx.fillRect(x(7.35), 38, 10, 10);
+      ctx.fillStyle = "#5f6a67";
+      ctx.fillText("炼厂降负", x(7.6), 47);
+
+      ctx.fillStyle = "#b87d2f";
+      ctx.fillRect(x(8.95), 38, 10, 10);
+      ctx.fillStyle = "#5f6a67";
+      ctx.fillText("预测区间", x(9.2), 47);
+    }
+
+    const brentRange = document.getElementById("brentRange");
+    const freightRange = document.getElementById("freightRange");
+    const outageRange = document.getElementById("outageRange");
+    const demandRange = document.getElementById("demandRange");
+
+    function signedNumber(value) {
+      return value > 0 ? `+${value}` : `${value}`;
+    }
+
+    function updateScenario() {
+      const brent = Number(brentRange.value);
+      const freight = Number(freightRange.value);
+      const outage = Number(outageRange.value);
+      const demand = Number(demandRange.value);
+
+      document.getElementById("brentOut").textContent = `${signedNumber(brent.toFixed(1))} 美元/桶`;
+      document.getElementById("freightOut").textContent = `${signedNumber(freight)} 元/吨`;
+      document.getElementById("outageOut").textContent = `${outage} 档`;
+      document.getElementById("demandOut").textContent = `${signedNumber(demand)} 档`;
+
+      const gas92 = Math.round(6885 + brent * 18 + freight * 0.12 + outage * 14 + demand * 6);
+      const diesel = Math.round(7020 + brent * 22 + freight * 0.18 + outage * 17 + demand * 10);
+      const henan = Math.round(58 + freight * 0.25 + outage * 4 + demand * 3);
+
+      document.getElementById("gas92Point").textContent = gas92;
+      document.getElementById("gas92Range").textContent = `${gas92 - 45} - ${gas92 + 25}`;
+      document.getElementById("dieselPoint").textContent = diesel;
+      document.getElementById("dieselRange").textContent = `${diesel - 53} - ${diesel + 37}`;
+      document.getElementById("henanReturn").textContent = `${henan >= 0 ? "+" : ""}${henan}`;
+      document.getElementById("henanLabel").textContent = henan >= 50 ? "窗口扩大" : henan >= 10 ? "窗口边缘" : "窗口关闭";
+
+      document.getElementById("rowGas92").textContent = gas92;
+      document.getElementById("rowGas92Delta").textContent = signedNumber(gas92 - 6885);
+      document.getElementById("rowGas92Delta").className = gas92 >= 6885 ? "up" : "down";
+
+      document.getElementById("rowDiesel").textContent = diesel;
+      document.getElementById("rowDieselDelta").textContent = signedNumber(diesel - 7020);
+      document.getElementById("rowDieselDelta").className = diesel >= 7020 ? "up" : "down";
+
+      const shanghaiState = freight >= 30 || henan < 20 ? "关闭" : "边缘打开";
+      document.getElementById("rowShanghai").textContent = shanghaiState;
+      document.getElementById("rowShanghaiDelta").textContent = shanghaiState === "关闭" ? "-1 档" : "0";
+      document.getElementById("rowShanghaiDelta").className = shanghaiState === "关闭" ? "down" : "flat";
+
+      document.getElementById("scenarioNarrative").textContent =
+        `当前情景下，山东 0# 柴油 D+1 点位 ${diesel >= 7020 ? "上修" : "下修"} ${Math.abs(diesel - 7020)} 元/吨。` +
+        ` Brent 变动、炼厂降负与运费共同作用后，河南净回报调整至 ${henan >= 0 ? "+" : ""}${henan} 元/吨。` +
+        ` 上海方向当前判断为“${shanghaiState}”，不建议把名义高价直接等同于可执行净收益。`;
+    }
+
+    [brentRange, freightRange, outageRange, demandRange].forEach((input) => {
+      input.addEventListener("input", updateScenario);
+    });
+
+    updateClock();
+    drawChart();
+    updateScenario();
+    setInterval(updateClock, 60000);
+  </script>
+</body>
+</html>

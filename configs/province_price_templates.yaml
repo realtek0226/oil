@@ -1,0 +1,42 @@
+templates:
+  - region_code: shanghai
+    province_name: 上海
+    source_code: sh_fgw
+    parser: html_price_notice
+    sample_url: https://fgw.sh.gov.cn/fgw_jggl/20260508/7a750fc441d54aa588a4390e84341866.html
+    notes: >
+      已验证可直接抽取正文和价格表。页面为“标号-单位-最高零售价”双行结构，
+      需要把“元/吨”和“元/升”合并到同一油号记录。
+
+  - region_code: zhejiang
+    province_name: 浙江
+    source_code: zj_fzggw
+    parser: html_price_notice
+    sample_url: https://fzggw.zj.gov.cn/art/2025/6/17/art_1229629046_5531857.html
+    notes: >
+      已验证可直接抽取正文和价格表。页面表格同时包含零售价和批发价，
+      一行一个油号，适合直接结构化。
+
+  - region_code: shandong
+    province_name: 山东
+    source_code: sd_fgw
+    parser: pending
+    sample_url:
+    notes: >
+      待补官方公告固定落点或样例 URL。当前保留模板位，后续确认官方页面结构后接入。
+
+  - region_code: jiangsu
+    province_name: 江苏
+    source_code: js_fgw
+    parser: pending
+    sample_url:
+    notes: >
+      待补官方公告固定落点或样例 URL。建议优先补长三角省份。
+
+  - region_code: guangdong
+    province_name: 广东
+    source_code: gd_fgw
+    parser: pending
+    sample_url:
+    notes: >
+      待补官方公告固定落点或样例 URL。建议用于华南零售价真值层。
