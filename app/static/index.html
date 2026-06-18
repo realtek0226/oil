@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>成品油研究工作台</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260613-1130-freight-dense-orange" />
+    <link rel="stylesheet" href="/static/styles.css?v=20260617-fast-latest-v7" />
   </head>
   <body data-theme="light">
     <a class="skip-link" href="#main">跳到主要内容</a>
@@ -75,8 +75,8 @@
 
             </aside>
 
-            <div class="home-center">
-              <section class="panel briefing-panel">
+              <div class="home-center">
+              <section class="panel briefing-panel" hidden>
                 <div class="panel-head">
                   <div>
                     <h2>晨报</h2>
@@ -130,6 +130,8 @@
 
                   <button id="refresh-button" class="primary-button" type="submit">刷新研究结论</button>
                 </form>
+
+                <div id="product-switch" class="product-switch" data-product-switch aria-label="品种切换"></div>
 
                 <div id="horizon-switch" class="horizon-strip"></div>
 
@@ -198,11 +200,14 @@
               </div>
             </div>
 
-            <div class="clearview-scroll">
+              <div class="clearview-scroll">
               <section class="clearview-block clearview-spread-panel">
-                <div class="mini-head">
-                  <h3>区域价差</h3>
-                  <span>净回款与外发动作</span>
+                <div class="mini-head clearview-spread-head">
+                  <div class="clearview-spread-title">
+                    <h3>区域价差</h3>
+                    <div class="product-switch product-switch--clearview" data-product-switch aria-label="品种切换"></div>
+                  </div>
+                  <div id="spread-horizon-switch" class="spread-horizon-switch" aria-label="区域价差周期切换"></div>
                 </div>
                 <div id="spread-grid" class="spread-grid"></div>
               </section>
@@ -211,7 +216,6 @@
                 <section class="clearview-block snapshot-panel">
                   <div class="mini-head">
                     <h3>关键经营指标</h3>
-                    <span>价格 + 隆众经营数据</span>
                   </div>
                   <div id="price-snapshot" class="snapshot-grid"></div>
                 </section>
@@ -256,14 +260,6 @@
                 <div id="oilchem-inventory-selected" class="oilchem-inventory-selected"></div>
                 <div id="oilchem-inventory-summary" class="oilchem-inventory-summary" hidden></div>
                 <div id="oilchem-inventory-table" class="oilchem-inventory-table"></div>
-              </section>
-
-              <section class="mini-panel heatmap-panel">
-                <div class="mini-head">
-                  <h3>区域价差热力</h3>
-                  <span id="regional-horizon-label">-</span>
-                </div>
-                <div id="spread-heatmap" class="heatmap-list"></div>
               </section>
 
               <section class="mini-panel freight-panel">
@@ -694,6 +690,6 @@
       </div>
     </dialog>
 
-    <script src="/static/app.js?v=20260613-1130-freight-dense-orange" defer></script>
+    <script src="/static/app.js?v=20260618-fast-latest-v12" defer></script>
   </body>
 </html>

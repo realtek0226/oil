@@ -5,6 +5,7 @@ from functools import lru_cache
 from app.clients.brent_report_client import BrentReportClient
 from app.clients.china_money_client import ChinaMoneyCnyMidClient
 from app.clients.cnenergy_refined_oil_client import CnEnergyRefinedOilClient
+from app.clients.competitor_price_client import CompetitorPriceClient
 from app.clients.eta_client import EtaClient
 from app.clients.jinshi_client import JinshiClient
 from app.clients.jlc_refined_oil_client import JlcRefinedOilClient
@@ -14,6 +15,7 @@ from app.clients.oilchem_price_client import OilchemPriceClient
 from app.clients.oilchem_production_sales_client import OilchemProductionSalesClient
 from app.clients.refined_oil_news_client import RefinedOilNewsClient
 from app.clients.refined_oil_policy_client import RefinedOilPolicyClient
+from app.clients.sci99_refinery_dynamic_client import Sci99RefineryDynamicClient
 from app.clients.wind_price_client import WindPriceClient
 from app.core.settings import get_settings
 from app.services.agent_control import AgentControlService
@@ -61,6 +63,12 @@ def get_oilchem_openapi_client() -> OilchemOpenApiClient:
 
 
 @lru_cache(maxsize=1)
+def get_competitor_price_client() -> CompetitorPriceClient:
+    settings = get_settings().competitor_price
+    return CompetitorPriceClient(base_url=settings.base_url, timeout_seconds=settings.timeout_seconds)
+
+
+@lru_cache(maxsize=1)
 def get_repository() -> FileRunRepository:
     return FileRunRepository()
 
@@ -89,14 +97,16 @@ def get_dataset_service() -> MarketDatasetService:
         catalog=get_catalog(),
         china_money_client=ChinaMoneyCnyMidClient(),
         wind_price_client=get_wind_price_client(),
-        brent_report_client=BrentReportClient(),
+        brent_report_client=BrentReportClient(get_settings().brent_report),
         jinshi_client=JinshiClient(get_settings().jinshi),
         refined_oil_news_client=RefinedOilNewsClient(),
         oilchem_openapi_client=get_oilchem_openapi_client(),
+        competitor_price_client=get_competitor_price_client(),
         oilchem_price_client=OilchemPriceClient(),
         oilchem_production_sales_client=OilchemProductionSalesClient(),
         cnenergy_refined_oil_client=CnEnergyRefinedOilClient(),
         jlc_refined_oil_client=JlcRefinedOilClient(),
+        sci99_refinery_dynamic_client=Sci99RefineryDynamicClient(get_settings().sci99),
         policy_client=RefinedOilPolicyClient(),
         snapshot_repository=get_snapshot_repository(),
         web_scraping_enabled=collector_settings.web_scraping_enabled,
@@ -129,6 +139,7 @@ def get_regional_spread_predictor() -> ShandongRegionalSpreadPredictor:
         llm_client=get_llm_client(),
         agent_control_service=get_agent_control_service(),
         snapshot_repository=get_snapshot_repository(),
+        outright_predictor=get_predictor(),
     )
 
 

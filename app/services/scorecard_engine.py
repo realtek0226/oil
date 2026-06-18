@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numbers
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -79,6 +80,7 @@ class ScorecardEngine:
         card = self._find_scorecard(payload, scorecard_code)
         horizon_used = self._resolve_horizon(card, horizon)
         horizon_payload = card["horizons"][horizon_used]
+        extra = {**extra, "horizon": horizon_used}
 
         group_scores: list[dict[str, Any]] = []
         unresolved_items: list[dict[str, Any]] = []
@@ -169,15 +171,23 @@ class ScorecardEngine:
         resolved = self._resolve_feature(feature_name, row=row, extra=extra)
         value = resolved.get("value")
         score_value = value
-        score_value_feature = feature.get("score_value_feature")
+        explicit_score_value_feature = feature.get("score_value_feature")
+        score_value_feature = explicit_score_value_feature or self._default_score_value_feature(feature_name)
         if score_value_feature:
             score_resolved = self._resolve_feature(str(score_value_feature), row=row, extra=extra)
-            score_value = score_resolved.get("value")
+            resolved_score_value = score_resolved.get("value")
+            if resolved_score_value is not None:
+                score_value = resolved_score_value
+            elif explicit_score_value_feature:
+                score_value = resolved_score_value
+            else:
+                score_value_feature = None
 
-        if self._unchanged_score_gate(feature_name=feature_name, row=row):
+        effective_rules = self._default_score_rules(feature_name, feature.get("rules") or []) if score_value_feature else (feature.get("rules") or [])
+        if self._unchanged_score_gate(feature_name=feature_name, row=row, extra=extra):
             score, label = 0.0, "unchanged_from_previous"
         elif method == "bucket_score":
-            score, label = self._bucket_score(score_value, feature.get("rules") or [])
+            score, label = self._bucket_score(score_value, effective_rules)
         elif method == "enum_score":
             label = str(value)
             score = float((feature.get("rules") or {}).get(label, 0.0))
@@ -222,6 +232,39 @@ class ScorecardEngine:
                     "note": sentiment.get("reason"),
                 }
         return {"value": self._resolve_feature_value(feature_name, row=row, extra=extra), "source": "feature_frame"}
+
+    def _default_score_value_feature(self, feature_name: str) -> str | None:
+        return {
+            "shandong_cdu_utilization_weekly": "shandong_cdu_utilization_percentile_weekly",
+            "shandong_product_inventory_percentile_weekly": "shandong_product_inventory_change_weekly",
+            "refinery_inventory_monthly": "shandong_refinery_inventory_change_weekly",
+            "main_company_inventory_monthly": "shandong_main_company_inventory_change_weekly",
+        }.get(feature_name)
+
+    def _default_score_rules(self, feature_name: str, rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if feature_name in {
+            "shandong_product_inventory_percentile_weekly",
+            "refinery_inventory_monthly",
+            "main_company_inventory_monthly",
+        }:
+            cap = self._max_abs_rule_score(rules)
+            return [
+                {"min": None, "max": -100.0, "score": cap, "label": "inventory_down_large"},
+                {"min": -100.0, "max": -20.0, "score": cap * 0.5, "label": "inventory_down"},
+                {"min": -20.0, "max": 20.0, "score": 0.0, "label": "inventory_flat"},
+                {"min": 20.0, "max": 100.0, "score": -cap * 0.5, "label": "inventory_up"},
+                {"min": 100.0, "max": None, "score": -cap, "label": "inventory_up_large"},
+            ]
+        return rules
+
+    def _max_abs_rule_score(self, rules: list[dict[str, Any]]) -> float:
+        values = []
+        for rule in rules:
+            try:
+                values.append(abs(float(rule.get("score") or 0.0)))
+            except Exception:
+                continue
+        return max(values) if values else 0.0
 
     def _bucket_score(self, value: Any, rules: list[dict[str, Any]]) -> tuple[float, str]:
         numeric_value = self._safe_float(value)
@@ -271,7 +314,7 @@ class ScorecardEngine:
             "brent_change_usd_d3": "brent_change_3d",
             "brent_change_usd_w1": "brent_change_5d",
             "brent_change_usd_mom": "brent_change_20d",
-            "shandong_cdu_utilization_weekly": "sd_crude_run_weekly",
+            "shandong_cdu_utilization_weekly": "shandong_cdu_utilization_weekly",
             "shandong_cdu_utilization_percentile_weekly": "shandong_cdu_utilization_percentile_weekly",
             "shandong_cdu_utilization_percentile_monthly": "shandong_cdu_utilization_percentile_monthly",
             "shandong_product_inventory_percentile_weekly": "shandong_product_inventory_percentile_weekly",
@@ -283,10 +326,18 @@ class ScorecardEngine:
             "sales_ratio_d1": "sales_ratio_d1",
             "sales_ratio_d3_avg": "sales_ratio_d3_avg",
             "sales_ratio_w1_avg": "sales_ratio_w1_avg",
+            "crude_run_change_1w": "crude_run_change_1w",
+            "shandong_product_inventory_change_weekly": "shandong_product_inventory_change_weekly",
+            "shandong_refinery_inventory_change_weekly": "shandong_refinery_inventory_change_weekly",
+            "shandong_main_company_inventory_change_weekly": "shandong_main_company_inventory_change_weekly",
         }
         if feature_name in feature_aliases:
             if feature_name.startswith("brent_change_usd_"):
                 return None
+            if feature_name == "shandong_product_inventory_percentile_weekly":
+                product_code = str((extra or {}).get("product_code") or "").upper()
+                if product_code == "DIESEL_0":
+                    return self._row_value(row, "shandong_diesel_product_inventory_percentile_weekly")
             return self._row_value(row, feature_aliases[feature_name])
         if feature_name in {"gasoline_crack_trend_d1", "gasoline_crack_trend_monthly"}:
             value = self._safe_float(self._row_value(row, "gasoline_crack_change_3d"))
@@ -308,7 +359,9 @@ class ScorecardEngine:
         if feature_name == "monthly_seasonality_phase":
             return feature_name
         if feature_name == "next_month_maintenance_plan":
-            return self._next_month_maintenance_plan(extra)
+            return self._maintenance_plan_label(extra, horizon=str(extra.get("horizon") or "M1"))
+        if feature_name.startswith("refinery_maintenance_plan_adjustment"):
+            return self._maintenance_plan_adjustment(extra, horizon=str(extra.get("horizon") or "M1"))
         if feature_name == "monthly_utilization_band":
             return "mid_band_balanced"
         if feature_name == "restocking_rhythm_monthly":
@@ -325,30 +378,72 @@ class ScorecardEngine:
             return self._market_sentiment_monthly(extra)
         return self._row_value(row, feature_name)
 
-    def _unchanged_score_gate(self, *, feature_name: str, row: pd.Series) -> bool:
+    def _parse_observation_date(self, value: Any) -> date | None:
+        if value is None:
+            return None
+        try:
+            if pd.isna(value):
+                return None
+        except Exception:
+            pass
+        if isinstance(value, numbers.Real):
+            magnitude = abs(float(value))
+            unit = "ns"
+            if magnitude < 10_000_000_000:
+                unit = "s"
+            elif magnitude < 10_000_000_000_000:
+                unit = "ms"
+            elif magnitude < 10_000_000_000_000_000:
+                unit = "us"
+            try:
+                return pd.to_datetime(value, unit=unit).date()
+            except Exception:
+                return None
+        try:
+            return pd.Timestamp(value).date()
+        except Exception:
+            return None
+
+    def _cdu_utilization_not_new_for_score(self, *, row: pd.Series, extra: dict[str, Any]) -> bool:
+        as_of_raw = extra.get("as_of_date")
+        observation_raw = self._row_value(row, "shandong_cdu_utilization_observation_date")
+        as_of_date = self._parse_observation_date(as_of_raw)
+        observation_date = self._parse_observation_date(observation_raw)
+        if as_of_date is None or observation_date is None:
+            return False
+        expected_date = as_of_date - timedelta(days=1)
+        if observation_date != expected_date:
+            return True
+        change = self._safe_float(self._row_value(row, "shandong_cdu_utilization_wow_pct"))
+        if change is not None:
+            return abs(change) < 1e-9
+        current_value = self._safe_float(self._row_value(row, "shandong_cdu_utilization_weekly"))
+        previous_value = self._safe_float(self._row_value(row, "shandong_cdu_utilization_previous_value"))
+        if current_value is None or previous_value is None:
+            return True
+        return abs(current_value - previous_value) < 1e-9
+
+    def _unchanged_score_gate(self, *, feature_name: str, row: pd.Series, extra: dict[str, Any] | None = None) -> bool:
         if feature_name in {
             "shandong_cdu_utilization_weekly",
             "shandong_cdu_utilization_percentile_weekly",
             "shandong_cdu_utilization_percentile_monthly",
         }:
-            wow_pct = self._safe_float(self._row_value(row, "shandong_cdu_utilization_wow_pct"))
-            if wow_pct is not None:
-                return abs(wow_pct) < 1e-9
-            change = self._safe_float(self._row_value(row, "crude_run_change_1w"))
-            if change is not None:
-                return abs(change) < 1e-9
+            if self._cdu_utilization_not_new_for_score(row=row, extra=extra or {}):
+                return True
         if feature_name == "shandong_product_inventory_percentile_weekly":
+            product_code = str((extra or {}).get("product_code") or "").upper()
+            if product_code == "DIESEL_0":
+                change = self._safe_float(self._row_value(row, "shandong_diesel_product_inventory_change_weekly"))
+                return change is None or abs(change) < 1e-9
             change = self._safe_float(self._row_value(row, "shandong_product_inventory_change_weekly"))
-            if change is not None:
-                return abs(change) < 1e-9
+            return change is None or abs(change) < 1e-9
         if feature_name == "refinery_inventory_monthly":
-            change = self._safe_float(self._row_value(row, "shandong_gasoline_inventory_change_mom"))
-            if change is not None:
-                return abs(change) < 1e-9
+            change = self._safe_float(self._row_value(row, "shandong_refinery_inventory_change_weekly"))
+            return change is None or abs(change) < 1e-9
         if feature_name == "main_company_inventory_monthly":
-            change = self._safe_float(self._row_value(row, "shandong_main_company_inventory_change_mom"))
-            if change is not None:
-                return abs(change) < 1e-9
+            change = self._safe_float(self._row_value(row, "shandong_main_company_inventory_change_weekly"))
+            return change is None or abs(change) < 1e-9
         return False
 
     def _resolve_brent_forecast_change(self, feature_name: str, *, extra: dict[str, Any]) -> dict[str, Any] | None:
@@ -374,21 +469,11 @@ class ScorecardEngine:
                     "source": "brent_daily_report",
                     "note": "daily_point_minus_report_settlement",
                 }
-            change_source = str(daily.get("change_source") or "daily_forecast_change")
-            change = self._safe_float(daily.get("change_usd"))
-            if change is not None and change_source != "daily_point_minus_realtime":
-                return {
-                    "value": change,
-                    "source": "brent_daily_report",
-                    "note": change_source,
-                }
-            settlement_change = self._safe_float(signals.get("brent_settlement_change_usd"))
-            if settlement_change is not None:
-                return {
-                    "value": settlement_change,
-                    "source": "brent_daily_report",
-                    "note": "settlement_change_vs_previous_settlement",
-                }
+            return {
+                "value": None,
+                "source": "brent_daily_report",
+                "note": "missing_daily_point_or_settlement",
+            }
 
         forecasts = signals.get("horizon_forecasts") or {}
         settlement = self._safe_float(signals.get("brent_settlement"))
@@ -518,35 +603,20 @@ class ScorecardEngine:
             return "high_inventory_pressure"
         return "balanced"
 
-    def _price_window_expectation(self, row: pd.Series) -> str:
-        expected_adjustment = self._first_numeric_row_value(
-            row,
-            [
-                "price_adjustment_expected_yuan",
-                "refined_oil_adjustment_expected_yuan",
-                "oil_price_adjustment_forecast_yuan",
-                "expected_price_adjustment_yuan_per_ton",
-                "price_window_expected_adjustment",
-            ],
-        )
-        if expected_adjustment is not None:
-            if expected_adjustment > 50.0:
-                return "up_adjustment_expected"
-            if expected_adjustment < -50.0:
-                return "down_adjustment_expected"
+    def _price_window_expectation(self, row: pd.Series) -> str | None:
+        expected_adjustment = self._safe_float(self._row_value(row, "price_adjustment_expected_yuan"))
+        if expected_adjustment is None:
+            return None
+        if expected_adjustment > 50.0:
+            return "up_adjustment_expected"
+        if expected_adjustment < -50.0:
+            return "down_adjustment_expected"
         return "neutral"
 
-    def _restocking_rhythm_monthly(self, row: pd.Series) -> str:
-        change = self._first_numeric_row_value(
-            row,
-            [
-                "sales_production_ratio_monthly_change",
-                "sales_production_ratio_mom_delta",
-                "sales_production_ratio_month_over_month",
-            ],
-        )
+    def _restocking_rhythm_monthly(self, row: pd.Series) -> str | None:
+        change = self._safe_float(self._row_value(row, "restocking_rhythm_monthly_change"))
         if change is None:
-            return "stable_small_lots"
+            return None
         if change >= 5.0:
             return "active_restocking"
         if change <= -5.0:
@@ -596,7 +666,7 @@ class ScorecardEngine:
             "bearish",
         }:
             return str(sentiment["label"])
-        return "neutral"
+        return None
 
     def _first_numeric_row_value(self, row: pd.Series, columns: list[str]) -> float | None:
         for column in columns:
@@ -605,15 +675,44 @@ class ScorecardEngine:
                 return value
         return None
 
-    def _next_month_maintenance_plan(self, extra: dict[str, Any]) -> str:
+
+    def _maintenance_plan_adjustment(self, extra: dict[str, Any], *, horizon: str) -> float:
+        label = self._maintenance_plan_label(extra, horizon=horizon)
+        if label == "concentrated_maintenance_supply_tight":
+            return 5.0
+        if label == "restart_and_supply_surplus":
+            return -5.0
+        return 0.0
+
+    def _maintenance_plan_label(self, extra: dict[str, Any], *, horizon: str) -> str | None:
         plan = extra.get("oilchem_maintenance_plan") or {}
         if not isinstance(plan, dict) or not plan:
+            return None
+        horizon_code = str(horizon).upper()
+        horizon_key = {"D1": "d1", "D3": "d3", "W1": "w1"}.get(horizon_code, "m1")
+        if str(horizon).upper() == "M1":
+            label = plan.get("m1_effective_capacity_label")
+            if label in {"concentrated_maintenance_supply_tight", "restart_and_supply_surplus", "stable_load"}:
+                return str(label)
+            active_capacity = self._safe_float(plan.get("m1_active_capacity"))
+            active_count = self._safe_float(plan.get("m1_active_count"))
+            if active_capacity is None and active_count is None:
+                return None
+            if (active_capacity or 0.0) > 0 or (active_count or 0.0) > 0:
+                return "concentrated_maintenance_supply_tight"
             return "stable_load"
-        active_capacity = self._safe_float(plan.get("active_capacity")) or 0.0
-        next_start_capacity = self._safe_float(plan.get("next_30d_start_capacity")) or 0.0
-        next_end_capacity = self._safe_float(plan.get("next_30d_end_capacity")) or 0.0
-        if next_end_capacity >= 600.0 and next_end_capacity > next_start_capacity + 300.0:
-            return "restart_and_supply_surplus"
-        if active_capacity >= 800.0 or next_start_capacity >= 500.0:
+        start_capacity = self._safe_float(plan.get(f"{horizon_key}_start_capacity"))
+        end_capacity = self._safe_float(plan.get(f"{horizon_key}_end_capacity"))
+        active_capacity = self._safe_float(plan.get(f"{horizon_key}_active_capacity"))
+        active_count = self._safe_float(plan.get(f"{horizon_key}_active_count"))
+        if start_capacity is None and end_capacity is None:
+            start_capacity = self._safe_float(plan.get("next_30d_start_capacity"))
+            end_capacity = self._safe_float(plan.get("next_30d_end_capacity"))
+        if start_capacity is None and end_capacity is None and active_capacity is None and active_count is None:
+            return None
+        net_tightening = (start_capacity or 0.0) - (end_capacity or 0.0)
+        if net_tightening > 0 or (active_capacity or 0.0) > 0 or (active_count or 0.0) > 0:
             return "concentrated_maintenance_supply_tight"
+        if net_tightening < 0:
+            return "restart_and_supply_surplus"
         return "stable_load"

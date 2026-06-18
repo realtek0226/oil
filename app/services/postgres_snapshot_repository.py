@@ -24,6 +24,11 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
         "source_type": "member_web",
         "priority": 4,
     },
+    "competitor_price_openapi": {
+        "source_name": "Competitor price open API",
+        "source_type": "internal_api",
+        "priority": 3,
+    },
     "cnenergy_oil_gas_fulltext": {
         "source_name": "CnEnergy oil-gas fulltext",
         "source_type": "news_web",
@@ -81,6 +86,11 @@ SOURCE_DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     "oilchem_refinery_maintenance_plan": {
         "source_name": "OilChem refinery maintenance plan",
+        "source_type": "member_web",
+        "priority": 6,
+    },
+    "oilchem_local_refinery_maintenance_plan": {
+        "source_name": "OilChem local refinery maintenance plan",
         "source_type": "member_web",
         "priority": 6,
     },
@@ -1513,6 +1523,248 @@ class PostgresSnapshotRepository:
                 saved = int(result.rowcount or 0)
         return saved
 
+    def save_competitor_market_price_records(self, records: list[dict[str, Any]]) -> int:
+        if not self.engine or not records:
+            return 0
+
+        region_company_names = {
+            "SHANDONG": [
+                "\u91d1\u8bda",
+                "\u5bcc\u6d77",
+                "\u6d77\u79d1",
+                "\u5229\u6d25",
+                "\u57a6\u5229",
+                "\u9c81\u6e05",
+                "\u6b63\u548c",
+                "\u9f50\u6210",
+                "\u5929\u5f18",
+            ],
+            "SOUTHWEST": ["\u76db\u9a6c\u5316\u5de5"],
+            "CENTRAL_CHINA": ["\u91d1\u6fb3\u79d1\u6280", "\u5357\u660c\u8d38\u6613", "\u5408\u80a5\u8d38\u6613"],
+            "NORTH_CHINA": ["\u6cb3\u5317\u946b\u6d77", "\u4e30\u5229\u77f3\u5316"],
+            "EAST_CHINA": ["\u6d59\u6c5f\u77f3\u5316"],
+            "NORTHWEST": ["\u5ef6\u5b89\u70bc\u5382", "\u5b81\u9c81\u77f3\u5316"],
+            "NORTHEAST": ["\u9526\u57ce\u77f3\u5316", "\u677e\u539f\u77f3\u5316"],
+            "SOUTH_CHINA": ["\u60e0\u5dde\u6d77\u6cb9"],
+        }
+        region_names = {
+            "SHANDONG": "\u5c71\u4e1c",
+            "SOUTHWEST": "\u897f\u5357",
+            "CENTRAL_CHINA": "\u534e\u4e2d",
+            "NORTH_CHINA": "\u534e\u5317",
+            "EAST_CHINA": "\u534e\u4e1c",
+            "NORTHWEST": "\u897f\u5317",
+            "NORTHEAST": "\u4e1c\u5317",
+            "SOUTH_CHINA": "\u534e\u5357",
+        }
+        region_prefixes = {
+            "SHANDONG": "sd",
+            "SOUTHWEST": "southwest",
+            "CENTRAL_CHINA": "central_china",
+            "NORTH_CHINA": "north_china",
+            "EAST_CHINA": "east_china",
+            "NORTHWEST": "northwest",
+            "NORTHEAST": "northeast",
+            "SOUTH_CHINA": "south_china",
+        }
+        product_meta = {
+            "gasoline92": {"name": "92#VI", "prefix": "gas92", "family": "GASOLINE_92"},
+            "diesel0": {"name": "0#VI", "prefix": "diesel0", "family": "DIESEL"},
+        }
+
+        buckets: dict[tuple[date, str, str], list[dict[str, Any]]] = {}
+        raw_rows_source: list[dict[str, Any]] = []
+        for record in records:
+            product_code = str(record.get("product_code") or "")
+            if product_code not in product_meta:
+                continue
+            observation_date = self._extract_item_date(record)
+            if observation_date is None:
+                continue
+            company = str(record.get("company") or "").strip()
+            value = record.get("today_price")
+            if value is None:
+                continue
+            for region_code, company_names in region_company_names.items():
+                if any(name in company for name in company_names):
+                    buckets.setdefault((observation_date, product_code, region_code), []).append(record)
+                    break
+            raw_rows_source.append(record)
+
+        if not buckets and not raw_rows_source:
+            return 0
+
+        indicator_rows: list[dict[str, Any]] = []
+        aggregate_rows: list[dict[str, Any]] = []
+        for (observation_date, product_code, region_code), bucket_records in buckets.items():
+            values = [float(record["today_price"]) for record in bucket_records if record.get("today_price") is not None]
+            if not values:
+                continue
+            product = product_meta[product_code]
+            region_name = region_names[region_code]
+            indicator_code = f"competitor_{region_prefixes[region_code]}_{product['prefix']}_market_avg"
+            entity_code = f"COMPETITOR_{region_code}_{product['family']}"
+            indicator_rows.append(
+                {
+                    "indicator_code": indicator_code,
+                    "indicator_name": f"{region_name}{product['name']}\u7ade\u5382\u5e02\u573a\u5747\u4ef7",
+                    "category": "refined_oil",
+                    "sub_category": "competitor_market_avg",
+                    "unit": "\u5143/\u5428",
+                    "freq": "daily",
+                    "value_type": "number",
+                    "fill_policy_default": "latest_available",
+                    "description": "\u6210\u54c1\u6cb9\u8be2\u4ef7\u63a5\u53e3\u7ade\u5382\u4ef7\u6309\u533a\u57df\u516c\u53f8\u89c4\u5219\u7b97\u672f\u5e73\u5747",
+                    "entity_code": entity_code,
+                    "entity_name": f"{region_name}{product['name']}\u7ade\u5382\u5e02\u573a",
+                    "entity_type": "market_region",
+                    "region_level": "province" if region_code == "SHANDONG" else "macro_region",
+                    "product_family": str(product["family"]),
+                }
+            )
+            aggregate_rows.append(
+                {
+                    "observation_date": observation_date,
+                    "product_code": product_code,
+                    "region_code": region_code,
+                    "region_name": region_name,
+                    "indicator_code": indicator_code,
+                    "entity_code": entity_code,
+                    "price": round(sum(values) / len(values), 6),
+                    "sample_count": len(values),
+                    "companies": [record.get("company") for record in bucket_records],
+                }
+            )
+
+        saved = 0
+        with self.engine.begin() as connection:
+            source_id = self._ensure_source_ids(connection, {"competitor_price_openapi"})["competitor_price_openapi"]
+            if indicator_rows:
+                self._ensure_indicators(connection, indicator_rows)
+                self._ensure_entities(connection, indicator_rows)
+
+            raw_rows = []
+            for record in raw_rows_source:
+                observation_date = self._extract_item_date(record) or date.today()
+                raw_rows.append(
+                    {
+                        "source_id": source_id,
+                        "source_record_id": (
+                            f"competitor_price:raw:{record.get('product_code')}:{record.get('company')}:{observation_date.isoformat()}"
+                        ),
+                        "topic": "competitor_price_openapi_raw",
+                        "source_event_time": datetime.combine(observation_date, time(15, 0)),
+                        "payload": json.dumps(record, ensure_ascii=False, default=str),
+                        "payload_hash": self._payload_hash(record),
+                        "dt": observation_date,
+                    }
+                )
+            if raw_rows:
+                connection.execute(
+                    text(
+                        f"""
+                        insert into {self._fqtn('ods_raw_market')} (
+                            source_id, source_record_id, topic, source_event_time,
+                            payload, payload_hash, dt
+                        )
+                        values (
+                            :source_id, :source_record_id, :topic, :source_event_time,
+                            cast(:payload as jsonb), :payload_hash, :dt
+                        )
+                        on conflict (source_id, source_record_id, payload_hash) do nothing
+                        """
+                    ),
+                    raw_rows,
+                )
+
+            if not aggregate_rows:
+                return 0
+            rows = list(
+                connection.execute(
+                    text(
+                        f"""
+                        select i.indicator_id, i.indicator_code, e.entity_id, e.entity_code
+                        from {self._fqtn('dim_indicator')} i
+                        join {self._fqtn('dim_entity')} e on 1 = 1
+                        where i.indicator_code in :indicator_codes
+                          and e.entity_code in :entity_codes
+                        """
+                    ).bindparams(
+                        bindparam("indicator_codes", expanding=True),
+                        bindparam("entity_codes", expanding=True),
+                    ),
+                    {
+                        "indicator_codes": [row["indicator_code"] for row in aggregate_rows],
+                        "entity_codes": [row["entity_code"] for row in aggregate_rows],
+                    },
+                ).mappings()
+            )
+            indicator_id_map = {str(row["indicator_code"]): int(row["indicator_id"]) for row in rows}
+            entity_id_map = {str(row["entity_code"]): int(row["entity_id"]) for row in rows}
+            ts_rows = []
+            for row in aggregate_rows:
+                indicator_id = indicator_id_map.get(row["indicator_code"])
+                entity_id = entity_id_map.get(row["entity_code"])
+                if not indicator_id or not entity_id:
+                    continue
+                observation_date = row["observation_date"]
+                publish_time = datetime.combine(observation_date, time(15, 0))
+                ts_rows.append(
+                    {
+                        "indicator_id": indicator_id,
+                        "entity_id": entity_id,
+                        "observation_time": datetime.combine(observation_date, time(0, 0)),
+                        "publish_time": publish_time,
+                        "freq": "daily",
+                        "value_num": float(row["price"]),
+                        "value_text": json.dumps(
+                            {"sample_count": row["sample_count"], "companies": row["companies"]},
+                            ensure_ascii=False,
+                        ),
+                        "unit": "\u5143/\u5428",
+                        "currency": "CNY",
+                        "source_id": source_id,
+                        "source_record_id": (
+                            f"competitor_price:avg:{row['product_code']}:{row['region_code']}:{observation_date.isoformat()}"
+                        ),
+                        "is_final": True,
+                        "revision_no": 1,
+                        "quality_flag": "ok",
+                        "effective_from": publish_time,
+                        "effective_to": None,
+                        "dt": observation_date,
+                    }
+                )
+            if ts_rows:
+                result = connection.execute(
+                    text(
+                        f"""
+                        insert into {self._fqtn('fact_market_timeseries')} (
+                            indicator_id, entity_id, observation_time, publish_time, freq,
+                            value_num, value_text, unit, currency, source_id, source_record_id,
+                            is_final, revision_no, quality_flag, effective_from, effective_to, dt
+                        )
+                        values (
+                            :indicator_id, :entity_id, :observation_time, :publish_time, :freq,
+                            :value_num, :value_text, :unit, :currency, :source_id, :source_record_id,
+                            :is_final, :revision_no, :quality_flag, :effective_from, :effective_to, :dt
+                        )
+                        on conflict (indicator_id, entity_id, observation_time, revision_no, source_id)
+                        do update set
+                            publish_time = excluded.publish_time,
+                            value_num = excluded.value_num,
+                            value_text = excluded.value_text,
+                            source_record_id = excluded.source_record_id,
+                            quality_flag = excluded.quality_flag,
+                            effective_from = excluded.effective_from,
+                            dt = excluded.dt
+                        """
+                    ),
+                    ts_rows,
+                )
+                saved = int(result.rowcount or 0)
+        return saved
+
     def save_oilchem_production_sales_records(self, records: list[dict[str, Any]]) -> int:
         if not self.engine or not records:
             return 0
@@ -1534,7 +1786,7 @@ class PostgresSnapshotRepository:
         indicator_rows = [
             {
                 "indicator_code": code,
-                "indicator_name": str(meta["indicator_name"]).replace("山东地炼", entity_name),
+                "indicator_name": str(meta["indicator_name"]),
                 "category": "refined_oil",
                 "sub_category": "production_sales_ratio",
                 "unit": "%",

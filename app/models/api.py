@@ -195,6 +195,11 @@ class PredictionAccuracySummary(BaseModel):
     direction_accuracy: float | None = None
     range_hit_rate: float | None = None
     within_50_rate: float | None = None
+    release_gate_status: str = "insufficient_data"
+    release_gate_label: str = "样本不足"
+    release_gate_passed: bool = False
+    release_gate_reason: str = "已验证样本不足，暂不能作为发布依据。"
+    release_gate_checks: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class PredictionAccuracyResponse(BaseModel):
@@ -420,6 +425,7 @@ class MorningBriefingResponse(BaseModel):
     generated_at: datetime
     content_markdown: str
     outright_predictions: list[PredictionResult] = Field(default_factory=list)
+    diesel0_predictions: list[PredictionResult] = Field(default_factory=list)
     regional_spread_predictions: list[PredictionResult] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 

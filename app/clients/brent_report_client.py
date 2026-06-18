@@ -7,15 +7,18 @@ from typing import Any
 
 import requests
 
-
-REPORT_URL = os.getenv("BRENT_REPORT_URL", "")
+from app.core.settings import BrentReportSettings
 
 
 class BrentReportClient:
+    def __init__(self, settings: BrentReportSettings | None = None) -> None:
+        self.api_url = (settings.api_url if settings else "") or os.getenv("BRENT_REPORT_URL", "")
+        self.timeout_seconds = float(settings.timeout_seconds if settings else 30.0)
+
     def fetch_latest(self) -> dict[str, Any]:
-        if not REPORT_URL:
+        if not self.api_url:
             raise RuntimeError("Brent report API URL is not configured")
-        response = requests.get(REPORT_URL, timeout=30)
+        response = requests.get(self.api_url, timeout=self.timeout_seconds)
         response.raise_for_status()
         payload = response.json()
         if not payload.get("ok"):
@@ -600,16 +603,24 @@ class BrentReportClient:
         return first.strip().lower() == "brent"
 
     def _extract_daily_forecast_date(self, markdown: str) -> date | None:
-        pattern = re.compile(
-            rf"{chr(0x5f53)}{chr(0x65e5)}{chr(0x9884)}{chr(0x6d4b)}\s*[{chr(0xff08)}(](?P<date>\d{{4}}-\d{{2}}-\d{{2}})[{chr(0xff09)})]"
+        patterns = (
+            re.compile(
+                rf"{chr(0x5f53)}{chr(0x65e5)}{chr(0x9884)}{chr(0x6d4b)}\s*[{chr(0xff08)}(](?P<date>\d{{4}}-\d{{2}}-\d{{2}})[{chr(0xff09)})]"
+            ),
+            re.compile(
+                rf"{chr(0x5f53)}{chr(0x65e5)}\s*[{chr(0xff08)}(](?P<date>\d{{4}}-\d{{2}}-\d{{2}})[{chr(0xff09)})]"
+            ),
+            re.compile(r"(?P<date>\d{4}-\d{2}-\d{2})"),
         )
-        match = pattern.search(markdown)
-        if not match:
-            return None
-        try:
-            return date.fromisoformat(match.group("date"))
-        except ValueError:
-            return None
+        for pattern in patterns:
+            match = pattern.search(markdown)
+            if not match:
+                continue
+            try:
+                return date.fromisoformat(match.group("date"))
+            except ValueError:
+                continue
+        return None
 
     def _with_daily_forecast_date(self, forecast: dict[str, Any], markdown: str) -> dict[str, Any]:
         if forecast and forecast.get("forecast_date") is None:

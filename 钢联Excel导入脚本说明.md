@@ -29,7 +29,7 @@
 
 默认只导入已映射到系统模型字段的核心指标，未映射字段不入库，避免把暂时不用的数据混进预测口径。
 
-当前共导入 22 个指标：
+当前共导入 23 个指标：
 
 | 类型 | 系统指标编码 | 含义 |
 |---|---|---|
@@ -55,6 +55,7 @@
 | 需求 | `sd_gas_sales_weekly` | 山东独立炼厂汽油出货量 |
 | 需求 | `sd_gas_production_weekly` | 山东独立炼厂汽油产量 |
 | 库存 | `shandong_independent_refinery_inventory` | 山东独立炼厂汽油厂内库存 |
+| 库存 | `shandong_diesel_inventory` | 山东独立炼厂柴油厂内库存 |
 
 其中产销率不直接从 Excel 读取，而是在模型特征中按以下公式计算：
 
@@ -191,4 +192,3 @@ dist\ganglian_excel_importer.exe
 ```powershell
 dist\ganglian_excel_importer.exe --excel D:\data\模型预测基础数据.xlsx --database-url "postgresql+psycopg://用户名:密码@服务器IP:5432/postgres" --schema oil_research --replace-source
 ```
-

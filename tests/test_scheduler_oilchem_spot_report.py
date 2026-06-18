@@ -174,13 +174,31 @@ def test_prediction_time_alignment_blocks_current_date_with_stale_brent_report(m
             "report_date": "2026-06-11",
             "signals": {
                 "brent_settlement": 93.1,
-                "daily_forecast": {"point_value": 94.78, "forecast_date": "2026-06-12"},
+                "daily_forecast": {"point_value": 94.78, "forecast_date": "2026-06-11"},
             },
         },
     )
 
     assert isinstance(error, PredictionTimeAlignmentError)
     assert error.report_date == date(2026, 6, 11)
+
+
+def test_prediction_time_alignment_allows_report_for_current_price_base_date(monkeypatch) -> None:
+    svc = _market_service()
+    monkeypatch.setattr("app.services.market_dataset.date", type("FixedDate", (date,), {"today": classmethod(lambda cls: date(2026, 6, 16))}))
+
+    error = svc._prediction_time_alignment_error(
+        as_of_date=date(2026, 6, 16),
+        report_payload={
+            "report_date": "2026-06-16",
+            "signals": {
+                "brent_settlement": 83.17,
+                "daily_forecast": {"point_value": 81.78, "forecast_date": "2026-06-16"},
+            },
+        },
+    )
+
+    assert error is None
 
 
 def test_prediction_time_alignment_allows_current_date_with_complete_brent_report(monkeypatch) -> None:

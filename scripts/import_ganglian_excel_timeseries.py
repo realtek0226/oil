@@ -238,6 +238,27 @@ except ModuleNotFoundError:
 
 DEFAULT_SOURCE_CODE = "ganglian_excel_import"
 DEFAULT_EXCEL_PATH = ROOT / "模型预测基础数据.xlsx"
+SKIP_PRICE_SHEET_NAMES = {"汽油价格", "柴油价格"}
+SKIP_PRICE_INDICATOR_CODES = {
+    "sd_gas92_market",
+    "cn_gas92_market",
+    "east_china_gas92_market",
+    "north_china_gas92_market",
+    "south_china_gas92_market",
+    "central_china_gas92_market",
+    "northwest_gas92_market",
+    "southwest_gas92_market",
+    "northeast_gas92_market",
+    "sd_diesel0_market",
+    "cn_diesel0_market",
+    "east_china_diesel0_market",
+    "north_china_diesel0_market",
+    "south_china_diesel0_market",
+    "central_china_diesel0_market",
+    "northwest_diesel0_market",
+    "southwest_diesel0_market",
+    "northeast_diesel0_market",
+}
 
 META_LABELS = {
     "indicator_name": "指标名称",
@@ -398,6 +419,36 @@ CORE_INDICATOR_BY_NAME: dict[str, tuple[str, str, str, str, str, str]] = {
     ),
 }
 
+CDU_UTILIZATION_INDICATOR_BY_NAME: dict[str, tuple[str, str, str, str, str, str]] = {
+    '成品油：常减压：产能利用率：山东：独立炼厂（周）': ('shandong_cdu_utilization_weekly', '山东独立炼厂成品油常减压产能利用率', 'SHANDONG_REFINERY', '山东独立炼厂', 'province', "REFINED_OIL"),
+    '成品油：常减压：产能利用率：华东地区（除山东）：独立炼厂（周）': ('east_china_cdu_utilization_weekly', '华东独立炼厂成品油常减压产能利用率', 'EAST_CHINA_REFINERY', '华东独立炼厂', 'macro_region', "REFINED_OIL"),
+    '成品油：常减压：产能利用率：华北地区：独立炼厂（周）': ('north_china_cdu_utilization_weekly', '华北独立炼厂成品油常减压产能利用率', 'NORTH_CHINA_REFINERY', '华北独立炼厂', 'macro_region', "REFINED_OIL"),
+    '成品油：常减压：产能利用率：华南地区：独立炼厂（周）': ('south_china_cdu_utilization_weekly', '华南独立炼厂成品油常减压产能利用率', 'SOUTH_CHINA_REFINERY', '华南独立炼厂', 'macro_region', "REFINED_OIL"),
+    '成品油：常减压：产能利用率：华中地区：独立炼厂（周）': ('central_china_cdu_utilization_weekly', '华中独立炼厂成品油常减压产能利用率', 'CENTRAL_CHINA_REFINERY', '华中独立炼厂', 'macro_region', "REFINED_OIL"),
+    '成品油：常减压：产能利用率：西北地区：独立炼厂（周）': ('northwest_cdu_utilization_weekly', '西北独立炼厂成品油常减压产能利用率', 'NORTHWEST_REFINERY', '西北独立炼厂', 'macro_region', "REFINED_OIL"),
+    '成品油：常减压：产能利用率：西南地区：独立炼厂（周）': ('southwest_cdu_utilization_weekly', '西南独立炼厂成品油常减压产能利用率', 'SOUTHWEST_REFINERY', '西南独立炼厂', 'macro_region', "REFINED_OIL"),
+    '成品油：常减压：产能利用率：东北地区：独立炼厂（周）': ('northeast_cdu_utilization_weekly', '东北独立炼厂成品油常减压产能利用率', 'NORTHEAST_REFINERY', '东北独立炼厂', 'macro_region', "REFINED_OIL"),
+}
+CORE_INDICATOR_BY_NAME.update(CDU_UTILIZATION_INDICATOR_BY_NAME)
+
+REGIONAL_SHIPMENTS_INDICATOR_BY_NAME: dict[str, tuple[str, str, str, str, str, str]] = {
+    '汽油：出货量：华东地区（除山东）：独立炼厂（周）': ('east_china_gasoline_shipments_weekly', '华东独立炼厂汽油出货量', 'EAST_CHINA_REFINERY_GASOLINE', '华东独立炼厂汽油', 'macro_region', 'GASOLINE_92'),
+    '汽油：出货量：华北地区：独立炼厂（周）': ('north_china_gasoline_shipments_weekly', '华北独立炼厂汽油出货量', 'NORTH_CHINA_REFINERY_GASOLINE', '华北独立炼厂汽油', 'macro_region', 'GASOLINE_92'),
+    '汽油：出货量：华南地区：独立炼厂（周）': ('south_china_gasoline_shipments_weekly', '华南独立炼厂汽油出货量', 'SOUTH_CHINA_REFINERY_GASOLINE', '华南独立炼厂汽油', 'macro_region', 'GASOLINE_92'),
+    '汽油：出货量：华中地区：独立炼厂（周）': ('central_china_gasoline_shipments_weekly', '华中独立炼厂汽油出货量', 'CENTRAL_CHINA_REFINERY_GASOLINE', '华中独立炼厂汽油', 'macro_region', 'GASOLINE_92'),
+    '汽油：出货量：西北地区：独立炼厂（周）': ('northwest_gasoline_shipments_weekly', '西北独立炼厂汽油出货量', 'NORTHWEST_REFINERY_GASOLINE', '西北独立炼厂汽油', 'macro_region', 'GASOLINE_92'),
+    '汽油：出货量：西南地区：独立炼厂（周）': ('southwest_gasoline_shipments_weekly', '西南独立炼厂汽油出货量', 'SOUTHWEST_REFINERY_GASOLINE', '西南独立炼厂汽油', 'macro_region', 'GASOLINE_92'),
+    '汽油：出货量：东北地区：独立炼厂（周）': ('northeast_gasoline_shipments_weekly', '东北独立炼厂汽油出货量', 'NORTHEAST_REFINERY_GASOLINE', '东北独立炼厂汽油', 'macro_region', 'GASOLINE_92'),
+    '柴油：出货量：华东地区（除山东）：独立炼厂（周）': ('east_china_diesel_shipments_weekly', '华东独立炼厂柴油出货量', 'EAST_CHINA_REFINERY_DIESEL', '华东独立炼厂柴油', 'macro_region', 'DIESEL'),
+    '柴油：出货量：华北地区：独立炼厂（周）': ('north_china_diesel_shipments_weekly', '华北独立炼厂柴油出货量', 'NORTH_CHINA_REFINERY_DIESEL', '华北独立炼厂柴油', 'macro_region', 'DIESEL'),
+    '柴油：出货量：华南地区：独立炼厂（周）': ('south_china_diesel_shipments_weekly', '华南独立炼厂柴油出货量', 'SOUTH_CHINA_REFINERY_DIESEL', '华南独立炼厂柴油', 'macro_region', 'DIESEL'),
+    '柴油：出货量：华中地区：独立炼厂（周）': ('central_china_diesel_shipments_weekly', '华中独立炼厂柴油出货量', 'CENTRAL_CHINA_REFINERY_DIESEL', '华中独立炼厂柴油', 'macro_region', 'DIESEL'),
+    '柴油：出货量：西北地区：独立炼厂（周）': ('northwest_diesel_shipments_weekly', '西北独立炼厂柴油出货量', 'NORTHWEST_REFINERY_DIESEL', '西北独立炼厂柴油', 'macro_region', 'DIESEL'),
+    '柴油：出货量：西南地区：独立炼厂（周）': ('southwest_diesel_shipments_weekly', '西南独立炼厂柴油出货量', 'SOUTHWEST_REFINERY_DIESEL', '西南独立炼厂柴油', 'macro_region', 'DIESEL'),
+    '柴油：出货量：东北地区：独立炼厂（周）': ('northeast_diesel_shipments_weekly', '东北独立炼厂柴油出货量', 'NORTHEAST_REFINERY_DIESEL', '东北独立炼厂柴油', 'macro_region', 'DIESEL'),
+}
+CORE_INDICATOR_BY_NAME.update(REGIONAL_SHIPMENTS_INDICATOR_BY_NAME)
+
 CORE_INDICATOR_BY_SOURCE_CODE: dict[str, tuple[str, str, str, str, str, str]] = {
     "ID01242419": ("cn_gas92_market", "全国92#汽油市场价", "NATIONAL", "全国", "country", "GASOLINE_92"),
     "ID01153195": ("sd_gas92_market", "山东92#汽油市场现汇价", "SHANDONG", "山东", "province", "GASOLINE_92"),
@@ -421,6 +472,7 @@ CORE_INDICATOR_BY_SOURCE_CODE: dict[str, tuple[str, str, str, str, str, str]] = 
     "ID01381881": ("sd_gas_production_weekly", "山东独立炼厂汽油产量", "SHANDONG_REFINERY_GASOLINE", "山东独立炼厂汽油", "province", "GASOLINE_92"),
     "ID01374903": ("sd_gas_sales_weekly", "山东独立炼厂汽油出货量", "SHANDONG_REFINERY_GASOLINE", "山东独立炼厂汽油", "province", "GASOLINE_92"),
     "ID01374817": ("shandong_independent_refinery_inventory", "山东独立炼厂汽油厂内库存", "SHANDONG_REFINERY_GASOLINE", "山东独立炼厂汽油", "province", "GASOLINE_92"),
+    "ID01374828": ("shandong_diesel_inventory", "山东独立炼厂柴油厂内库存", "SHANDONG_REFINERY_DIESEL", "山东独立炼厂柴油", "province", "DIESEL"),
 }
 
 
@@ -448,6 +500,7 @@ CORE_INDICATOR_BY_SOURCE_CODE.update({
     'ID01381881': ('sd_gas_production_weekly', '山东独立炼厂汽油产量', 'SHANDONG_REFINERY_GASOLINE', '山东独立炼厂汽油', 'province', 'GASOLINE_92'),
     'ID01374903': ('sd_gas_sales_weekly', '山东独立炼厂汽油出货量', 'SHANDONG_REFINERY_GASOLINE', '山东独立炼厂汽油', 'province', 'GASOLINE_92'),
     'ID01374817': ('shandong_independent_refinery_inventory', '山东独立炼厂汽油厂内库存', 'SHANDONG_REFINERY_GASOLINE', '山东独立炼厂汽油', 'province', 'GASOLINE_92'),
+    'ID01374828': ('shandong_diesel_inventory', '山东独立炼厂柴油厂内库存', 'SHANDONG_REFINERY_DIESEL', '山东独立炼厂柴油', 'province', 'DIESEL'),
 })
 
 MAPPED_INDICATOR_CODES = {
@@ -650,7 +703,7 @@ def build_series_columns(raw: pd.DataFrame, sheet_name: str) -> tuple[list[Serie
         description = clean_text(raw.iat[meta_rows["description"], col_idx]) if "description" in meta_rows else ""
         end_time = clean_text(raw.iat[meta_rows["end_time"], col_idx]) if "end_time" in meta_rows else ""
         update_time = clean_text(raw.iat[meta_rows["update_time"], col_idx]) if "update_time" in meta_rows else ""
-        mapped = CORE_INDICATOR_BY_SOURCE_CODE.get(source_indicator_code) or CORE_INDICATOR_BY_NAME.get(raw_indicator_name)
+        mapped = CORE_INDICATOR_BY_NAME.get(raw_indicator_name) or CORE_INDICATOR_BY_SOURCE_CODE.get(source_indicator_code)
         if mapped:
             indicator_code, indicator_name, entity_code, entity_name, region_level, product_family = mapped
             is_core_mapped = True
@@ -692,6 +745,7 @@ def extract_excel_timeseries(
     start_date: date | None = None,
     end_date: date | None = None,
     mapped_only: bool = True,
+    skip_sheet_names: set[str] | tuple[str, ...] = (),
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     if not path.exists():
         raise FileNotFoundError(f"Excel file not found: {path}")
@@ -701,7 +755,12 @@ def extract_excel_timeseries(
     sheet_summaries: list[dict[str, Any]] = []
     skipped_sheets: list[str] = []
 
+    skip_sheet_name_set = set(skip_sheet_names or ())
+
     for sheet_name in excel.sheet_names:
+        if sheet_name in skip_sheet_name_set:
+            skipped_sheets.append(sheet_name)
+            continue
         raw = pd.read_excel(path, sheet_name=sheet_name, header=None)
         if raw.empty:
             skipped_sheets.append(sheet_name)
@@ -712,9 +771,11 @@ def extract_excel_timeseries(
             continue
         if mapped_only:
             series_columns = [series for series in series_columns if series.is_core_mapped]
-            if not series_columns:
-                skipped_sheets.append(sheet_name)
-                continue
+        if skip_sheet_name_set:
+            series_columns = [series for series in series_columns if series.indicator_code not in SKIP_PRICE_INDICATOR_CODES]
+        if not series_columns:
+            skipped_sheets.append(sheet_name)
+            continue
         rows_before = len(data_rows)
         for series in series_columns:
             indicator_rows.setdefault(
@@ -970,6 +1031,7 @@ def main() -> None:
     parser.add_argument("--start-date", default="")
     parser.add_argument("--end-date", default="")
     parser.add_argument("--all-columns", action="store_true")
+    parser.add_argument("--include-price-sheets", action="store_true", help="Import gasoline/diesel price sheets as well.")
     parser.add_argument("--replace-source", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--summary-output", default="artifacts/ganglian_excel_import_summary.json")
@@ -984,6 +1046,7 @@ def main() -> None:
         start_date=start_date,
         end_date=end_date,
         mapped_only=not args.all_columns,
+        skip_sheet_names=() if args.include_price_sheets else SKIP_PRICE_SHEET_NAMES,
     )
     summary["dry_run"] = bool(args.dry_run)
     summary["start_date_filter"] = start_date

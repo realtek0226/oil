@@ -9,7 +9,7 @@ from app.clients.llm_client import LlmClient
 from app.models.common import PredictionResult
 from app.services.chat_data_resolver import ChatDataResolver
 from app.services.market_dataset import MarketDatasetService
-from app.services.predictors.horizons import DEFAULT_HORIZONS
+from app.services.predictors.horizons import ACTIVE_HORIZONS, DEFAULT_HORIZONS
 from app.services.predictors.shandong_gas92 import ShandongGas92Predictor
 from app.services.predictors.shandong_regional_spreads import (
     ShandongRegionalSpreadPredictor,
@@ -27,6 +27,11 @@ REGION_KEYWORDS = {
     "西南": "SOUTHWEST",
     "东北": "NORTHEAST",
 }
+
+
+def _active_horizon(horizon: str | None = None) -> str:
+    normalized = str(horizon or "D1").strip().upper()
+    return normalized if normalized in ACTIVE_HORIZONS else DEFAULT_HORIZONS[0]
 
 
 class WorkbenchService:
@@ -61,7 +66,7 @@ class WorkbenchService:
         run_date = date.today()
         target_date = as_of_date or self.dataset_service.resolve_default_prediction_as_of(run_date)
         data_query_date = as_of_date or run_date
-        selected_horizon = horizon or self._infer_horizon(message)
+        selected_horizon = _active_horizon(horizon or self._infer_horizon(message))
         scenario_text = message.strip()
         request_id = f"chat-{uuid.uuid4().hex[:10]}"
         if self._is_identity_question(scenario_text):
@@ -182,6 +187,20 @@ class WorkbenchService:
             enable_refined_news=True,
             enable_event_risk=True,
         )
+        diesel0_error: str | None = None
+        diesel0_predictions: list[PredictionResult] = []
+        try:
+            diesel0_predictions = self.predictor.run_diesel0_multi_horizon_predictions_from_context(
+                context=context,
+                as_of_date=target_date,
+                horizons=DEFAULT_HORIZONS,
+                use_llm_explainer=False,
+                scenario_text=None,
+                enable_refined_news=True,
+                enable_event_risk=True,
+            )
+        except Exception as exc:
+            diesel0_error = str(exc)
         if use_llm_writer and self.llm_client.enabled:
             try:
                 d1_prediction = self.predictor.run_prediction_from_context(
@@ -215,6 +234,7 @@ class WorkbenchService:
         base_markdown = self._build_briefing_markdown(
             as_of_date=target_date,
             outright_predictions=outright_predictions,
+            diesel0_predictions=diesel0_predictions,
             regional_predictions=regional_predictions,
             context=context.current_row.to_dict(),
             policy_items=policy_highlights,
@@ -242,11 +262,13 @@ class WorkbenchService:
             "generated_at": generated_at.isoformat(),
             "content_markdown": content_markdown,
             "outright_predictions": [item.model_dump(mode="json") for item in outright_predictions],
+            "diesel0_predictions": [item.model_dump(mode="json") for item in diesel0_predictions],
             "regional_spread_predictions": [item.model_dump(mode="json") for item in regional_predictions],
             "metadata": {
                 "policy_count": len(context.policy_items),
                 "event_news_count": len(context.news_items),
                 "refined_news_count": len(context.refined_news_items),
+                "diesel0_error": diesel0_error,
                 "market_data_reason": context.metadata.get("market_data_reason"),
                 "prediction_run_date": run_date.isoformat(),
                 "prediction_input_date": target_date.isoformat(),
@@ -258,6 +280,9 @@ class WorkbenchService:
                     "sd_gas92_market": context.current_row.get("sd_gas92_market"),
                     "cn_gas92_market": context.current_row.get("cn_gas92_market"),
                     "east_china_gas92_market": context.current_row.get("east_china_gas92_market"),
+                    "sd_diesel0_market": context.current_row.get("sd_diesel0_market"),
+                    "cn_diesel0_market": context.current_row.get("cn_diesel0_market"),
+                    "east_china_diesel0_market": context.current_row.get("east_china_diesel0_market"),
                 },
                 "policy_highlights": policy_highlights,
                 "event_highlights": event_highlights,
@@ -444,6 +469,7 @@ class WorkbenchService:
         *,
         as_of_date: date,
         outright_predictions: list[PredictionResult],
+        diesel0_predictions: list[PredictionResult],
         regional_predictions: list[PredictionResult],
         context: dict[str, Any],
         policy_items: list[dict[str, Any]],
@@ -454,18 +480,29 @@ class WorkbenchService:
             f"- 山东92#: {self._fmt(context.get('sd_gas92_market'))}",
             f"- 全国92#: {self._fmt(context.get('cn_gas92_market'))}",
             f"- 华东92#: {self._fmt(context.get('east_china_gas92_market'))}",
+            f"- 山东0#柴油: {self._fmt(context.get('sd_diesel0_market'))}",
+            f"- 全国0#柴油: {self._fmt(context.get('cn_diesel0_market'))}",
+            f"- 华东0#柴油: {self._fmt(context.get('east_china_diesel0_market'))}",
         ]
         outlook_lines = [
-            f"- {item.horizon}: {self._direction_text(item.direction_label)}，点位 {item.point_value:.2f}，区间 {item.range_lower:.2f}~{item.range_upper:.2f}"
+            f"- 92#汽油 {item.horizon}: {self._direction_text(item.direction_label)}，点位 {item.point_value:.2f}，区间 {item.range_lower:.2f}~{item.range_upper:.2f}"
             for item in outright_predictions
+        ]
+        diesel0_outlook_lines = [
+            f"- 0#柴油 {item.horizon}: {self._direction_text(item.direction_label)}，点位 {item.point_value:.2f}，区间 {item.range_lower:.2f}~{item.range_upper:.2f}"
+            for item in (diesel0_predictions or [])
         ]
         spread_lines = [
             f"- {item.raw_context.get('counter_region_name')}-山东: {self._direction_text(item.direction_label, is_spread=True)}，点位 {item.point_value:.2f}"
             for item in regional_predictions[:4]
         ]
         advice_lines = [
-            f"- {advice.title}: {advice.action}"
+            f"- 92#汽油 | {advice.title}: {advice.action}"
             for advice in (outright_predictions[0].operating_advice if outright_predictions else [])[:3]
+        ]
+        diesel0_advice_lines = [
+            f"- 0#柴油 | {advice.title}: {advice.action}"
+            for advice in ((diesel0_predictions or [])[0].operating_advice if diesel0_predictions else [])[:3]
         ]
         policy_lines = [
             f"- 政策 | {item.get('time') or '-'} | {item.get('impact') or item.get('title') or '-'} | {item.get('action') or '-'}"
@@ -481,10 +518,12 @@ class WorkbenchService:
             *price_lines,
             "## 多周期判断",
             *outlook_lines,
+            *(diesel0_outlook_lines or ["- 0#柴油: 暂无可用预测，请检查柴油价格、产销率和库存数据。"]),
             "## 区域价差观察",
             *(spread_lines or ["- 暂无新增区域价差重点。"]),
             "## 经营建议",
             *(advice_lines or ["- 暂无新增经营建议。"]),
+            *diesel0_advice_lines,
             "## 政策与风险",
             *(policy_lines or ["- 暂无新增政策更新。"]),
             *(risk_lines or ["- 暂无新增事件风险提示。"]),
@@ -571,8 +610,32 @@ class WorkbenchService:
             return "关注终端补库延后，库存和报价从严"
         return "维持跨窗口谨慎，等待新一轮调价指引"
 
+
+    def _event_direction_hint(self, item: dict[str, Any]) -> str:
+        text = " ".join(str(item.get(key) or "") for key in ("headline", "title", "summary", "content"))
+        relief_phrases = (
+            "海峡开放",
+            "重新开放",
+            "恢复开放",
+            "恢复通航",
+            "恢复航行",
+            "解除封锁",
+            "封锁解除",
+            "航运恢复",
+            "通行恢复",
+            "局势缓和",
+            "停火",
+            "达成协议",
+        )
+        disruption_phrases = ("封锁", "关闭", "袭击", "战争", "断供", "制裁", "红海", "霍尔木兹", "供应中断")
+        if any(phrase in text for phrase in relief_phrases):
+            return "bearish"
+        if any(phrase in text for phrase in disruption_phrases):
+            return "bullish"
+        return str(item.get("direction_hint") or "").lower()
+
     def _event_impact_text(self, item: dict[str, Any]) -> str:
-        direction = str(item.get("direction_hint") or "").lower()
+        direction = self._event_direction_hint(item)
         score = item.get("relevance_score") or item.get("major_score") or 0
         impact_time = item.get("publish_time") or item.get("publish_date") or "-"
         title = item.get("headline") or item.get("title") or "事件快讯"
@@ -586,6 +649,8 @@ class WorkbenchService:
 
     def _event_action_text(self, item: dict[str, Any]) -> str:
         text = f"{item.get('headline') or item.get('title') or ''}{item.get('content') or ''}"
+        if self._event_direction_hint(item) == "bearish":
+            return "\u6309\u4f9b\u5e94\u98ce\u9669\u7f13\u548c\u5904\u7406\uff0c\u590d\u6838Brent\u56de\u843d\u548c\u73b0\u8d27\u8ba9\u5229\u8282\u594f"
         if any(keyword in text for keyword in ("EIA", "API", "库存", "OPEC", "欧佩克", "非农")):
             return "列入日内盯盘，触发Brent急动时同步复核现货报价"
         if any(keyword in text for keyword in ("地缘", "袭击", "制裁", "红海", "霍尔木兹")):

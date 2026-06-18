@@ -50,6 +50,12 @@ class BusinessAdvice(BaseModel):
     valid_until: datetime | None = None
     risk_stop: str | None = None
     owner_role: str | None = None
+    card_type: str = "经营动作卡"
+    scenario: str | None = None
+    execution_boundary: str | None = None
+    review_required: bool = False
+    review_role: str | None = None
+    status: str = "待执行"
 
 
 class PredictionResult(BaseModel):

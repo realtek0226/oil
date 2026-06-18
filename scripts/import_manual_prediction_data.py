@@ -38,7 +38,7 @@ PRICE_COLUMN_MAP = {
 
 MANUAL_FACTOR_COLUMN_MAP = {
     "汽油产销率3日均值(%)": ("sales_production_ratio_d3_avg", "汽油产销率3日均值", "SHANDONG_REFINERY_GASOLINE", "山东地炼汽油", "province"),
-    "汽油产销率5日均值(%)": ("sales_production_ratio_w1_avg", "汽油产销率5日均值", "SHANDONG_REFINERY_GASOLINE", "山东地炼汽油", "province"),
+    "汽油产销率7日均值(%)": ("sales_production_ratio_w1_avg", "汽油产销率7日均值", "SHANDONG_REFINERY_GASOLINE", "山东地炼汽油", "province"),
 }
 
 

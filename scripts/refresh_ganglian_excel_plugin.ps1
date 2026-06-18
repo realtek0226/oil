@@ -224,7 +224,7 @@ try {
     Start-Sleep -Milliseconds 800
 
     Write-Step "Searching for Ganglian ribbon tab"
-    $GanglianTab = Find-ElementByNameLike -Root $Root -Patterns @('????2.0', '????', '????', 'Ganglian', 'Mysteel') -TimeoutSeconds 8
+    $GanglianTab = Find-ElementByNameLike -Root $Root -Patterns @([regex]::Unescape('\u94a2\u8054\u6570\u636e2.0'), [regex]::Unescape('\u94a2\u8054\u6570\u636e'), [regex]::Unescape('\u94a2\u8054'), 'Ganglian', 'Mysteel') -TimeoutSeconds 8
     if ($GanglianTab) {
         Write-Step "Ganglian tab/control found: $($GanglianTab.Current.Name). Clicking it."
         Invoke-Element -Element $GanglianTab | Out-Null
@@ -239,7 +239,7 @@ try {
     }
 
     Write-Step "Searching for login button"
-    $LoginElement = Find-ElementByNameLike -Root $Root -Patterns @('??', '??', 'Login', 'Sign in') -TimeoutSeconds 8
+    $LoginElement = Find-ElementByNameLike -Root $Root -Patterns @([regex]::Unescape('\u767b\u5f55'), [regex]::Unescape('\u767b\u9646'), 'Login', 'Sign in') -TimeoutSeconds 8
     if ($LoginElement) {
         Write-Step "Login button found: $($LoginElement.Current.Name). Clicking it."
         if (-not (Invoke-Element -Element $LoginElement)) {
@@ -276,7 +276,7 @@ try {
         Invoke-ScreenClick -X $UpdateClickX -Y $UpdateClickY -Label "update-all-pages button" | Out-Null
     } else {
         Write-Step "Searching for update-all-pages button"
-        $UpdateElement = Find-ElementByNameLike -Root $Root -Patterns @('?????', '?????', '?????', '?????', 'Update All', 'Refresh All') -TimeoutSeconds 25
+        $UpdateElement = Find-ElementByNameLike -Root $Root -Patterns @([regex]::Unescape('\u66f4\u65b0\u6240\u6709\u9875'), [regex]::Unescape('\u66f4\u65b0\u5168\u90e8\u9875'), [regex]::Unescape('\u66f4\u65b0\u6240\u6709'), [regex]::Unescape('\u5168\u90e8\u66f4\u65b0'), 'Update All', 'Refresh All') -TimeoutSeconds 25
     }
     if (-not $UpdateElement -and -not ($UpdateClickX -gt 0 -and $UpdateClickY -gt 0)) {
         $DiagnosticsPath = Join-Path (Split-Path -Parent $ExcelFullPath) "artifacts\ganglian_excel_controls.txt"

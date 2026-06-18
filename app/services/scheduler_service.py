@@ -14,7 +14,7 @@ from app.services.workbench_service import WorkbenchService
 
 logger = logging.getLogger(__name__)
 
-JobMode = Literal["interval", "daily"]
+JobMode = Literal["interval", "daily", "weekly"]
 
 
 @dataclass
@@ -111,6 +111,7 @@ class SchedulerService:
         oilchem_openapi_enabled = bool(
             getattr(getattr(self.dataset_service, "oilchem_openapi_client", None), "enabled", False)
         )
+        competitor_price_enabled = bool(getattr(self.dataset_service, "competitor_price_client", None))
         return {
             "market_snapshot": SchedulerJobState(
                 job_key="market_snapshot",
@@ -141,7 +142,7 @@ class SchedulerService:
                 label="晨报生成",
                 mode="daily",
                 schedule_value=self.settings.morning_briefing_time,
-                enabled=bool(self.settings.morning_briefing_time.strip()),
+                enabled=self.settings.morning_briefing_enabled and bool(self.settings.morning_briefing_time.strip()),
                 job_func=self._run_morning_briefing_job,
             ),
             "oilchem_spot_report_fetch": SchedulerJobState(
@@ -171,16 +172,16 @@ class SchedulerService:
             ),
             "oilchem_independent_maintenance_fetch": SchedulerJobState(
                 job_key="oilchem_independent_maintenance_fetch",
-                label="隆众地炼检修计划抓取",
-                mode="daily",
+                label="隆众地方炼厂检修计划抓取",
+                mode="weekly",
                 schedule_value=self.settings.oilchem_independent_maintenance_fetch_time,
                 enabled=oilchem_scraping_enabled and bool(self.settings.oilchem_independent_maintenance_fetch_time.strip()),
                 job_func=self._run_oilchem_independent_maintenance_job,
             ),
             "oilchem_main_maintenance_fetch": SchedulerJobState(
                 job_key="oilchem_main_maintenance_fetch",
-                label="隆众主营检修计划抓取",
-                mode="daily",
+                label="隆众主营炼厂检修计划抓取",
+                mode="weekly",
                 schedule_value=self.settings.oilchem_main_maintenance_fetch_time,
                 enabled=oilchem_scraping_enabled and bool(self.settings.oilchem_main_maintenance_fetch_time.strip()),
                 job_func=self._run_oilchem_main_maintenance_job,
@@ -193,6 +194,14 @@ class SchedulerService:
                 enabled=oilchem_scraping_enabled and bool(self.settings.oilchem_daily_fetch_time.strip()),
                 job_func=self._run_oilchem_daily_job,
             ),
+            "competitor_price_fetch": SchedulerJobState(
+                job_key="competitor_price_fetch",
+                label="成品油询价市场均价入库",
+                mode="daily",
+                schedule_value=self.settings.competitor_price_fetch_time,
+                enabled=competitor_price_enabled and bool(self.settings.competitor_price_fetch_time.strip()),
+                job_func=self._run_competitor_price_job,
+            ),
             "oilchem_openapi_inventory_fetch": SchedulerJobState(
                 job_key="oilchem_openapi_inventory_fetch",
                 label="隆众已购库存接口同步",
@@ -200,6 +209,24 @@ class SchedulerService:
                 schedule_value=self.settings.oilchem_openapi_inventory_fetch_time,
                 enabled=oilchem_openapi_enabled and bool(self.settings.oilchem_openapi_inventory_fetch_time.strip()),
                 job_func=self._run_oilchem_openapi_inventory_job,
+            ),
+            "sci99_price_adjustment_fetch": SchedulerJobState(
+                job_key="sci99_price_adjustment_fetch",
+                label="卓创调价预测抓取",
+                mode="daily",
+                schedule_value=self.settings.sci99_price_adjustment_fetch_time,
+                enabled=web_scraping_enabled and bool(self.settings.sci99_price_adjustment_fetch_time.strip()),
+                job_func=self._run_sci99_price_adjustment_job,
+            ),
+            "refined_news_fetch": SchedulerJobState(
+                job_key="refined_news_fetch",
+                label="多源成品油资讯低频抓取",
+                mode="daily",
+                schedule_value=self.settings.refined_news_fetch_time,
+                enabled=web_scraping_enabled
+                and bool(getattr(self.dataset_service, "refined_news_scraping_enabled", False))
+                and bool(self.settings.refined_news_fetch_time.strip()),
+                job_func=self._run_refined_news_job,
             ),
         }
 
@@ -210,7 +237,8 @@ class SchedulerService:
                 job.next_run_at = None
                 continue
             if job.mode == "interval":
-                job.next_run_at = now
+                interval_seconds = self._interval_seconds_for(job.job_key)
+                job.next_run_at = now + timedelta(seconds=max(interval_seconds, 1))
                 continue
             job.next_run_at = self._initial_daily_run(job=job, now=now)
 
@@ -282,14 +310,16 @@ class SchedulerService:
         if job.mode == "interval":
             interval_seconds = self._interval_seconds_for(job.job_key)
             return reference + timedelta(seconds=interval_seconds)
+        if job.mode == "weekly":
+            return self._next_weekly_time(after=reference, time_text=job.schedule_value, weekday=4)
         return self._next_daily_time(after=reference, time_text=job.schedule_value)
 
     def _initial_daily_run(self, *, job: SchedulerJobState, now: datetime) -> datetime:
+        if job.mode == "weekly":
+            return self._next_weekly_time(after=now, time_text=job.schedule_value, weekday=4)
         scheduled_today = self._combine_today(time_text=job.schedule_value, now=now)
         if now < scheduled_today:
             return scheduled_today
-        if job.job_key == "morning_briefing" and not self._has_today_briefing():
-            return now
         return self._next_daily_time(after=now, time_text=job.schedule_value)
 
     def _run_market_snapshot_job(self) -> dict[str, Any]:
@@ -338,6 +368,11 @@ class SchedulerService:
         payload = self.dataset_service.refresh_oilchem_price_archive(as_of_date=target_date)
         return {"as_of_date": target_date.isoformat(), **payload}
 
+    def _run_competitor_price_job(self) -> dict[str, Any]:
+        target_date = self._local_today()
+        payload = self.dataset_service.refresh_competitor_price_archive(as_of_date=target_date)
+        return {"as_of_date": target_date.isoformat(), **payload}
+
     def _run_oilchem_production_sales_job(self) -> dict[str, Any]:
         target_date = self._local_today()
         payload = self.dataset_service.refresh_oilchem_production_sales_archive(as_of_date=target_date)
@@ -347,7 +382,7 @@ class SchedulerService:
         target_date = self._local_today()
         payload = self.dataset_service.refresh_oilchem_maintenance_archive(
             as_of_date=target_date,
-            refinery_scope="independent",
+            refinery_scope="local",
         )
         return {"as_of_date": target_date.isoformat(), **payload}
 
@@ -362,6 +397,16 @@ class SchedulerService:
     def _run_oilchem_openapi_inventory_job(self) -> dict[str, Any]:
         target_date = self._local_today()
         payload = self.dataset_service.refresh_oilchem_openapi_inventory_archive(as_of_date=target_date)
+        return {"as_of_date": target_date.isoformat(), **payload}
+
+    def _run_sci99_price_adjustment_job(self) -> dict[str, Any]:
+        target_date = self._local_today()
+        payload = self.dataset_service.refresh_sci99_price_adjustment_archive(as_of_date=target_date)
+        return {"as_of_date": target_date.isoformat(), **payload}
+
+    def _run_refined_news_job(self) -> dict[str, Any]:
+        target_date = self._local_today()
+        payload = self.dataset_service.refresh_refined_news_archive(as_of_date=target_date)
         return {"as_of_date": target_date.isoformat(), **payload}
 
     def _run_oilchem_spot_report_job(self) -> dict[str, Any]:
@@ -406,6 +451,14 @@ class SchedulerService:
         candidate = self._combine_today(time_text=time_text, now=after)
         if candidate <= after:
             candidate = candidate + timedelta(days=1)
+        return candidate
+
+    def _next_weekly_time(self, *, after: datetime, time_text: str, weekday: int) -> datetime:
+        candidate = self._combine_today(time_text=time_text, now=after)
+        days_ahead = (weekday - candidate.weekday()) % 7
+        candidate = candidate + timedelta(days=days_ahead)
+        if candidate <= after:
+            candidate = candidate + timedelta(days=7)
         return candidate
 
     def _parse_daily_time(self, value: str) -> tuple[int, int]:

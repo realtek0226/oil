@@ -15,6 +15,7 @@ from app.clients.llm_client import LlmClient
 from app.models.common import AgentClaim, PredictionResult
 from app.services.agent_control import AgentControlService
 from app.services.agents.llm_agents import build_llm_agent_claims
+from app.services.predictors.shandong_gas92 import ShandongGas92Predictor
 from app.services.market_dataset import MarketDatasetService, PredictionContext
 from app.services.postgres_snapshot_repository import PostgresSnapshotRepository
 from app.services.predictors.advice_engine import build_driver_summary, build_spread_advice
@@ -55,6 +56,28 @@ REGIONAL_FREIGHT_COMPONENT_CONFIGS: list[dict[str, Any]] = [
     {"region_code": "NORTHEAST", "region_name": _zh("\u4e1c\u5317"), "component_key": "NORTHEAST_PANJIN_TRUCK", "short_name": _zh("\u9526\u57ce\u77f3\u5316"), "route_name": _zh("\u8fbd\u5b81\u7701\u76d8\u9526\u5e02(\u8f66\u8fd0\u8d39)"), "freight_value": 180.0},
     {"region_code": "NORTHEAST", "region_name": _zh("\u4e1c\u5317"), "component_key": "NORTHEAST_SONGYUAN_TRUCK", "short_name": _zh("\u677e\u539f\u77f3\u5316"), "route_name": _zh("\u5409\u6797\u7701\u677e\u539f\u5e02(\u8f66\u8fd0\u8d39)"), "freight_value": 200.0},
 ]
+
+
+REGIONAL_REFINERY_INVENTORY_INDICATORS = {
+    "GASOLINE_92": {
+        "NORTHEAST": "ganglian_id01374798",
+        "NORTH_CHINA": "ganglian_id01374797",
+        "EAST_CHINA": "ganglian_id01374812",
+        "SOUTH_CHINA": "ganglian_id01374823",
+        "CENTRAL_CHINA": "ganglian_id01374792",
+        "NORTHWEST": "ganglian_id01374805",
+        "SOUTHWEST": "ganglian_id01374789",
+    },
+    "DIESEL_0": {
+        "NORTHEAST": "ganglian_id01374808",
+        "NORTH_CHINA": "ganglian_id01374844",
+        "EAST_CHINA": "ganglian_id01374814",
+        "SOUTH_CHINA": "ganglian_id01374806",
+        "CENTRAL_CHINA": "ganglian_id01374821",
+        "NORTHWEST": "ganglian_id01374829",
+        "SOUTHWEST": "ganglian_id01374807",
+    },
+}
 
 REGIONAL_STATE_MIN_SAMPLE = 12
 REGIONAL_RULE_CORRECTION_WEIGHT = 0.35
@@ -402,6 +425,9 @@ class RegionalSpreadConfig:
     region_name: str
     price_column: str
     spread_column: str
+    shandong_price_column: str = "sd_gas92_market"
+    product_code: str = "GASOLINE_92_SPREAD"
+    product_label: str = "92#"
 
     @property
     def spread_change_1d_column(self) -> str:
@@ -413,7 +439,8 @@ class RegionalSpreadConfig:
 
     @property
     def entity_code(self) -> str:
-        return f"{self.region_code}_VS_SD_GAS92_SPREAD"
+        suffix = "DIESEL0" if self.product_code == "DIESEL_0_SPREAD" else "GAS92"
+        return f"{self.region_code}_VS_SD_{suffix}_SPREAD"
 
     @property
     def output_region_code(self) -> str:
@@ -432,6 +459,30 @@ REGIONAL_SPREAD_CONFIGS: dict[str, RegionalSpreadConfig] = {
     "NORTHEAST": RegionalSpreadConfig("NORTHEAST", "东北", "northeast_gas92_market", "sd_vs_northeast_spread"),
 }
 
+DIESEL_REGIONAL_SPREAD_CONFIGS: dict[str, RegionalSpreadConfig] = {
+    "EAST_CHINA": RegionalSpreadConfig(
+        "EAST_CHINA", "华东", "east_china_diesel0_market", "sd_vs_east_china_diesel_spread", "sd_diesel0_market", "DIESEL_0_SPREAD", "0#柴油"
+    ),
+    "NORTH_CHINA": RegionalSpreadConfig(
+        "NORTH_CHINA", "华北", "north_china_diesel0_market", "sd_vs_north_china_diesel_spread", "sd_diesel0_market", "DIESEL_0_SPREAD", "0#柴油"
+    ),
+    "SOUTH_CHINA": RegionalSpreadConfig(
+        "SOUTH_CHINA", "华南", "south_china_diesel0_market", "sd_vs_south_china_diesel_spread", "sd_diesel0_market", "DIESEL_0_SPREAD", "0#柴油"
+    ),
+    "CENTRAL_CHINA": RegionalSpreadConfig(
+        "CENTRAL_CHINA", "华中", "central_china_diesel0_market", "sd_vs_central_china_diesel_spread", "sd_diesel0_market", "DIESEL_0_SPREAD", "0#柴油"
+    ),
+    "NORTHWEST": RegionalSpreadConfig(
+        "NORTHWEST", "西北", "northwest_diesel0_market", "sd_vs_northwest_diesel_spread", "sd_diesel0_market", "DIESEL_0_SPREAD", "0#柴油"
+    ),
+    "SOUTHWEST": RegionalSpreadConfig(
+        "SOUTHWEST", "西南", "southwest_diesel0_market", "sd_vs_southwest_diesel_spread", "sd_diesel0_market", "DIESEL_0_SPREAD", "0#柴油"
+    ),
+    "NORTHEAST": RegionalSpreadConfig(
+        "NORTHEAST", "东北", "northeast_diesel0_market", "sd_vs_northeast_diesel_spread", "sd_diesel0_market", "DIESEL_0_SPREAD", "0#柴油"
+    ),
+}
+
 
 def attach_regional_price_forecasts(
     regional_predictions: list[PredictionResult],
@@ -444,64 +495,61 @@ def attach_regional_price_forecasts(
         if outright is None:
             continue
         raw_context = dict(regional.raw_context or {})
-        predicted_spread = _float_or_none(raw_context.get("predicted_region_minus_shandong_spread"))
-        if predicted_spread is None:
-            predicted_spread = float(regional.point_value)
-        predicted_shandong_price = float(outright.point_value)
-        business_prediction = (outright.raw_context or {}).get("business_scorecard_prediction") or {}
-        business_shandong_price = _float_or_none(business_prediction.get("point_value"))
-        predicted_region_price = predicted_shandong_price + predicted_spread
+        current_region_price = _float_or_none(raw_context.get("current_counter_region_price"))
+        current_shandong_price = _float_or_none(raw_context.get("current_shandong_price"))
         actual_region_minus_shandong = _float_or_none(raw_context.get("current_spread"))
-        range_lower = float(regional.range_lower)
-        range_upper = float(regional.range_upper)
+        if current_region_price is None:
+            if current_shandong_price is not None and actual_region_minus_shandong is not None:
+                current_region_price = current_shandong_price + actual_region_minus_shandong
+            else:
+                current_region_price = float(regional.point_value)
+        if current_shandong_price is None and actual_region_minus_shandong is not None:
+            current_shandong_price = current_region_price - actual_region_minus_shandong
+        predicted_region_price = float(regional.point_value)
+        predicted_shandong_price = float(outright.point_value)
         raw_context.update(
             {
                 "predicted_shandong_price": round(predicted_shandong_price, 2),
                 "predicted_region_price": round(predicted_region_price, 2),
-                "predicted_region_price_range_lower": round(predicted_shandong_price + range_lower, 2),
-                "predicted_region_price_range_upper": round(predicted_shandong_price + range_upper, 2),
-                "predicted_region_minus_shandong_spread": round(predicted_spread, 2),
-                "predicted_region_minus_shandong_spread_range_lower": round(range_lower, 2),
-                "predicted_region_minus_shandong_spread_range_upper": round(range_upper, 2),
+                "predicted_region_price_range_lower": round(float(regional.range_lower), 2),
+                "predicted_region_price_range_upper": round(float(regional.range_upper), 2),
+                "predicted_region_minus_shandong_spread": round(predicted_region_price - predicted_shandong_price, 2),
+                "predicted_region_minus_shandong_spread_range_lower": round(float(regional.range_lower) - predicted_shandong_price, 2),
+                "predicted_region_minus_shandong_spread_range_upper": round(float(regional.range_upper) - predicted_shandong_price, 2),
                 "actual_region_minus_shandong_spread": actual_region_minus_shandong,
-                "predicted_shandong_minus_region_spread": round(-predicted_spread, 2),
-                "predicted_shandong_minus_region_spread_range_lower": round(-range_upper, 2),
-                "predicted_shandong_minus_region_spread_range_upper": round(-range_lower, 2),
+                "predicted_shandong_minus_region_spread": round(predicted_shandong_price - predicted_region_price, 2),
+                "predicted_shandong_minus_region_spread_range_lower": round(predicted_shandong_price - float(regional.range_upper), 2),
+                "predicted_shandong_minus_region_spread_range_upper": round(predicted_shandong_price - float(regional.range_lower), 2),
                 "actual_shandong_minus_region_spread": round(-actual_region_minus_shandong, 2)
                 if actual_region_minus_shandong is not None
                 else None,
-                "regional_price_prediction_mode": "shandong_forecast_plus_regional_spread",
-                "regional_price_prediction_formula": "预测区域单价=山东92#预测价+(目标区域预测价差)，目标区域预测价差=目标区域价格-山东价格",
-                "predicted_spread_formula": "预测展示价差=山东92#预测价-预测区域单价",
-                "actual_spread_formula": "真实展示价差=当前山东92#价格-当前目标区域92#价格",
+                "regional_price_prediction_mode": raw_context.get("regional_price_prediction_mode") or "regionalized_shandong_market_logic",
+                "regional_price_prediction_formula": raw_context.get("regional_price_prediction_formula")
+                or "\u9884\u6d4b\u533a\u57df\u5355\u4ef7=\u533a\u57df\u5f53\u524d\u4ef7+\u5c71\u4e1c\u540c\u6b3e\u9884\u6d4b\u903b\u8f91\u5728\u533a\u57df\u6570\u636e\u4e0a\u91cd\u7b97\u7684\u53d8\u5316\u3002",
+                "predicted_spread_formula": "\u9884\u6d4b\u533a\u57df\u4ef7\u5dee=\u533a\u57df\u9884\u6d4b\u4ef7-\u5c71\u4e1c\u9884\u6d4b\u4ef7",
+                "actual_spread_formula": "\u5f53\u524d\u533a\u57df\u4ef7\u5dee=\u5f53\u524d\u533a\u57df\u4ef7-\u5f53\u524d\u5c71\u4e1c\u4ef7",
                 "shandong_prediction_run_id": outright.run_id,
             }
         )
-        composite_variant = _regional_variant_from_legacy(
-            raw_context.get("regional_composite_prediction"),
-            model_name="区域智能体综合预测",
-            prediction_type="regional_composite",
-            direction_label=regional.direction_label,
-            point_value=regional.point_value,
-            range_lower=regional.range_lower,
-            range_upper=regional.range_upper,
-            predicted_delta=raw_context.get("predicted_delta"),
-            method=raw_context.get("prediction_method"),
-            basis="区域状态表中位数叠加规则智能体修正，并受经营上下边界约束。",
-        )
-        raw_context["regional_composite_prediction"] = _attach_regional_variant_prices(
+        composite_variant = raw_context.get("regional_composite_prediction")
+        if not isinstance(composite_variant, dict):
+            composite_variant = _regional_variant_from_outright_prediction(
+                prediction=regional,
+                current_region_price=float(current_region_price),
+                current_shandong_price=current_shandong_price,
+                model_name="\u533a\u57df\u667a\u80fd\u4f53\u9884\u6d4b",
+                prediction_type="regional_composite",
+                shandong_prediction_source="\u533a\u57df\u5316\u5c71\u4e1c\u667a\u80fd\u4f53\u903b\u8f91",
+            )
+        raw_context["regional_composite_prediction"] = _attach_region_price_fields_to_variant(
             composite_variant,
             predicted_shandong_price=predicted_shandong_price,
-            shandong_prediction_source="智能体综合预测",
         )
         baseline_variant = raw_context.get("regional_baseline_prediction")
         if isinstance(baseline_variant, dict):
-            raw_context["regional_baseline_prediction"] = _attach_regional_variant_prices(
+            raw_context["regional_baseline_prediction"] = _attach_region_price_fields_to_variant(
                 baseline_variant,
-                predicted_shandong_price=business_shandong_price or predicted_shandong_price,
-                shandong_prediction_source=(
-                    "山东成品油市场价预测打分模型" if business_shandong_price is not None else "智能体综合预测"
-                ),
+                predicted_shandong_price=_float_or_none(baseline_variant.get("predicted_shandong_price")) or predicted_shandong_price,
             )
         raw_context["regional_prediction_variants"] = [
             raw_context["regional_composite_prediction"],
@@ -513,6 +561,125 @@ def attach_regional_price_forecasts(
         ]
         regional.raw_context = raw_context
     return regional_predictions
+
+
+def _attach_region_price_fields_to_variant(variant: dict[str, Any], *, predicted_shandong_price: float) -> dict[str, Any]:
+    result = dict(variant)
+    point = _float_or_none(result.get("predicted_region_price")) or _float_or_none(result.get("point_value"))
+    if point is None:
+        point = _float_or_none(result.get("predicted_region_minus_shandong_spread"))
+        if point is not None:
+            point = predicted_shandong_price + point
+    if point is None:
+        return result
+    lower = _float_or_none(result.get("predicted_region_price_range_lower")) or _float_or_none(result.get("range_lower")) or point
+    upper = _float_or_none(result.get("predicted_region_price_range_upper")) or _float_or_none(result.get("range_upper")) or point
+    result.update(
+        {
+            "predicted_shandong_price": round(float(predicted_shandong_price), 2),
+            "predicted_region_price": round(float(point), 2),
+            "predicted_region_price_range_lower": round(float(lower), 2),
+            "predicted_region_price_range_upper": round(float(upper), 2),
+            "predicted_region_minus_shandong_spread": round(float(point) - float(predicted_shandong_price), 2),
+            "predicted_region_minus_shandong_spread_range_lower": round(float(lower) - float(predicted_shandong_price), 2),
+            "predicted_region_minus_shandong_spread_range_upper": round(float(upper) - float(predicted_shandong_price), 2),
+            "predicted_shandong_minus_region_spread": round(float(predicted_shandong_price) - float(point), 2),
+            "predicted_shandong_minus_region_spread_range_lower": round(float(predicted_shandong_price) - float(upper), 2),
+            "predicted_shandong_minus_region_spread_range_upper": round(float(predicted_shandong_price) - float(lower), 2),
+        }
+    )
+    return result
+
+
+def _regional_variant_from_outright_prediction(
+    *,
+    prediction: PredictionResult,
+    current_region_price: float,
+    current_shandong_price: float | None,
+    model_name: str,
+    prediction_type: str,
+    shandong_prediction_source: str,
+) -> dict[str, Any]:
+    shandong_anchor = float((prediction.raw_context or {}).get("current_price") or current_shandong_price or prediction.point_value)
+    predicted_delta = float(prediction.point_value) - shandong_anchor
+    lower_delta = float(prediction.range_lower) - shandong_anchor
+    upper_delta = float(prediction.range_upper) - shandong_anchor
+    predicted_region_price = current_region_price + predicted_delta
+    range_lower = current_region_price + lower_delta
+    range_upper = current_region_price + upper_delta
+    predicted_shandong_price = float(prediction.point_value)
+    return {
+        "model_name": model_name,
+        "prediction_type": prediction_type,
+        "direction_label": prediction.direction_label,
+        "score": round(float(prediction.score_value), 4),
+        "predicted_delta": round(predicted_delta, 4),
+        "predicted_region_price": round(predicted_region_price, 2),
+        "predicted_region_price_range_lower": round(range_lower, 2),
+        "predicted_region_price_range_upper": round(range_upper, 2),
+        "predicted_shandong_price": round(predicted_shandong_price, 2),
+        "predicted_region_minus_shandong_spread": round(predicted_region_price - predicted_shandong_price, 2),
+        "predicted_region_minus_shandong_spread_range_lower": round(range_lower - predicted_shandong_price, 2),
+        "predicted_region_minus_shandong_spread_range_upper": round(range_upper - predicted_shandong_price, 2),
+        "predicted_shandong_minus_region_spread": round(predicted_shandong_price - predicted_region_price, 2),
+        "predicted_shandong_minus_region_spread_range_lower": round(predicted_shandong_price - range_upper, 2),
+        "predicted_shandong_minus_region_spread_range_upper": round(predicted_shandong_price - range_lower, 2),
+        "range_half_width": round(max(abs(predicted_region_price - range_lower), abs(range_upper - predicted_region_price)), 4),
+        "method": "shandong_market_logic_delta_replay",
+        "basis": "\u533a\u57df\u5355\u4ef7\u4e0d\u518d\u7528\u533a\u57df\u4ef7\u5dee\u56e0\u5b50\u5355\u72ec\u9884\u6d4b\uff1b\u6539\u4e3a\u5b8c\u5168\u590d\u7528\u5c71\u4e1c\u5e02\u573a\u4ef7\u683c\u540c\u5468\u671f\u9884\u6d4b\u903b\u8f91\uff0c\u628a\u5c71\u4e1c\u9884\u6d4b\u53d8\u5316\u5e73\u79fb\u5230\u533a\u57df\u5f53\u524d\u4ef7\u3002",
+        "calculation": f"\u533a\u57df\u5f53\u524d\u4ef7{round(current_region_price, 2)} + \u5c71\u4e1c\u9884\u6d4b\u53d8\u5316{round(predicted_delta, 4)} = {round(predicted_region_price, 2)}",
+        "factor_breakdown": list(prediction.factor_breakdown or []),
+        "scorecard": (prediction.raw_context or {}).get("business_scorecard"),
+        "business_scorecard": (prediction.raw_context or {}).get("business_scorecard"),
+        "agent_claims": (prediction.raw_context or {}).get("agent_claims"),
+        "shandong_prediction_source": shandong_prediction_source,
+        "regional_price_prediction_formula": "\u9884\u6d4b\u533a\u57df\u5355\u4ef7=\u5f53\u524d\u533a\u57df\u5355\u4ef7+\u5c71\u4e1c\u540c\u5468\u671f\u9884\u6d4b\u53d8\u5316",
+    }
+
+
+def _regional_variant_from_business_prediction(
+    *,
+    business_prediction: dict[str, Any],
+    scorecard: dict[str, Any] | None,
+    current_region_price: float,
+    current_shandong_price: float | None,
+    shandong_prediction_source: str,
+) -> dict[str, Any]:
+    shandong_point = _float_or_none(business_prediction.get("point_value"))
+    if shandong_point is None:
+        return {}
+    anchor = _float_or_none(business_prediction.get("current_price")) or current_shandong_price or shandong_point
+    predicted_delta = shandong_point - anchor
+    range_lower_delta = (_float_or_none(business_prediction.get("range_lower")) or shandong_point) - anchor
+    range_upper_delta = (_float_or_none(business_prediction.get("range_upper")) or shandong_point) - anchor
+    predicted_region_price = current_region_price + predicted_delta
+    range_lower = current_region_price + range_lower_delta
+    range_upper = current_region_price + range_upper_delta
+    return {
+        "model_name": "\u533a\u57df\u4e1a\u52a1\u903b\u8f91\u9884\u6d4b\uff08\u590d\u523b\u5c71\u4e1c\u903b\u8f91\uff09",
+        "prediction_type": "regional_baseline",
+        "direction_label": business_prediction.get("direction_label") or "flat",
+        "score": round(float(business_prediction.get("score") or 0.0), 4),
+        "predicted_delta": round(predicted_delta, 4),
+        "predicted_region_price": round(predicted_region_price, 2),
+        "predicted_region_price_range_lower": round(range_lower, 2),
+        "predicted_region_price_range_upper": round(range_upper, 2),
+        "predicted_shandong_price": round(shandong_point, 2),
+        "predicted_region_minus_shandong_spread": round(predicted_region_price - shandong_point, 2),
+        "predicted_region_minus_shandong_spread_range_lower": round(range_lower - shandong_point, 2),
+        "predicted_region_minus_shandong_spread_range_upper": round(range_upper - shandong_point, 2),
+        "predicted_shandong_minus_region_spread": round(shandong_point - predicted_region_price, 2),
+        "predicted_shandong_minus_region_spread_range_lower": round(shandong_point - range_upper, 2),
+        "predicted_shandong_minus_region_spread_range_upper": round(shandong_point - range_lower, 2),
+        "range_half_width": business_prediction.get("range_half_width"),
+        "method": "shandong_business_scorecard_delta_replay",
+        "basis": "\u533a\u57df\u4e1a\u52a1\u903b\u8f91\u5b8c\u5168\u590d\u7528\u5c71\u4e1c\u4e1a\u52a1\u6253\u5206\u903b\u8f91\uff0c\u4ee5\u5c71\u4e1c\u4e1a\u52a1\u9884\u6d4b\u53d8\u5316\u5e73\u79fb\u5230\u533a\u57df\u5f53\u524d\u4ef7\u3002",
+        "calculation": f"\u533a\u57df\u5f53\u524d\u4ef7{round(current_region_price, 2)} + \u5c71\u4e1c\u4e1a\u52a1\u9884\u6d4b\u53d8\u5316{round(predicted_delta, 4)} = {round(predicted_region_price, 2)}",
+        "scorecard": scorecard,
+        "factor_breakdown": [],
+        "shandong_prediction_source": shandong_prediction_source,
+        "regional_price_prediction_formula": "\u9884\u6d4b\u533a\u57df\u5355\u4ef7=\u5f53\u524d\u533a\u57df\u5355\u4ef7+\u5c71\u4e1c\u4e1a\u52a1\u903b\u8f91\u9884\u6d4b\u53d8\u5316",
+    }
 
 
 def _regional_variant_from_legacy(
@@ -658,12 +825,16 @@ class ShandongRegionalSpreadPredictor:
         llm_client: LlmClient,
         agent_control_service: AgentControlService,
         snapshot_repository: PostgresSnapshotRepository | None = None,
+        outright_predictor: ShandongGas92Predictor | None = None,
     ) -> None:
         self.dataset_service = dataset_service
         self.llm_client = llm_client
         self.agent_control_service = agent_control_service
         self.snapshot_repository = snapshot_repository
+        self.outright_predictor = outright_predictor
         self.scope_key = "regional_spread"
+        self._multi_prediction_cache: dict[str, tuple[datetime, dict[str, list[PredictionResult]]]] = {}
+        self._multi_prediction_cache_seconds = 600
         self._regional_inventory_cache: dict[date, list[dict[str, Any]]] = {}
         self._regional_inventory_context_cache: dict[tuple[str, date], dict[str, Any]] = {}
         self.agents = [
@@ -672,8 +843,8 @@ class ShandongRegionalSpreadPredictor:
             RegionalInventoryPressureAgent(),
         ]
 
-    def list_regions(self) -> list[dict[str, str]]:
-        return [{"region_code": item.region_code, "region_name": item.region_name} for item in REGIONAL_SPREAD_CONFIGS.values()]
+    def list_regions(self, product_code: str = "GASOLINE_92") -> list[dict[str, str]]:
+        return [{"region_code": item.region_code, "region_name": item.region_name} for item in self._config_map(product_code).values()]
 
     def run_prediction(
         self,
@@ -684,6 +855,7 @@ class ShandongRegionalSpreadPredictor:
         scenario_text: str | None = None,
         enable_refined_news: bool = True,
         enable_event_risk: bool = True,
+        product_code: str = "GASOLINE_92",
     ) -> PredictionResult:
         as_of_date = as_of_date or date.today()
         context = self.dataset_service.build_context(as_of_date)
@@ -696,6 +868,7 @@ class ShandongRegionalSpreadPredictor:
             scenario_text=scenario_text,
             enable_refined_news=enable_refined_news,
             enable_event_risk=enable_event_risk,
+            product_code=product_code,
         )
 
     def run_prediction_from_context(
@@ -708,8 +881,9 @@ class ShandongRegionalSpreadPredictor:
         scenario_text: str | None = None,
         enable_refined_news: bool = True,
         enable_event_risk: bool = True,
+        product_code: str = "GASOLINE_92",
     ) -> PredictionResult:
-        config = self._resolve_config(region_code)
+        config = self._resolve_config(region_code, product_code=product_code)
         horizon_config = resolve_horizon_config(horizon)
         return self._predict_from_context(
             context=context,
@@ -721,6 +895,7 @@ class ShandongRegionalSpreadPredictor:
             enable_refined_news=enable_refined_news,
             enable_event_risk=enable_event_risk,
             context_metadata=context.metadata,
+            product_code=product_code,
         )
 
     def run_all_predictions(
@@ -732,6 +907,7 @@ class ShandongRegionalSpreadPredictor:
         enable_refined_news: bool = True,
         enable_event_risk: bool = True,
         region_codes: list[str] | None = None,
+        product_code: str = "GASOLINE_92",
     ) -> list[PredictionResult]:
         as_of_date = as_of_date or date.today()
         context = self.dataset_service.build_context(as_of_date)
@@ -744,6 +920,7 @@ class ShandongRegionalSpreadPredictor:
             enable_refined_news=enable_refined_news,
             enable_event_risk=enable_event_risk,
             region_codes=region_codes,
+            product_code=product_code,
         )
 
     def run_all_predictions_from_context(
@@ -756,9 +933,10 @@ class ShandongRegionalSpreadPredictor:
         enable_refined_news: bool = True,
         enable_event_risk: bool = True,
         region_codes: list[str] | None = None,
+        product_code: str = "GASOLINE_92",
     ) -> list[PredictionResult]:
         horizon_config = resolve_horizon_config(horizon)
-        configs = self._resolve_configs(region_codes)
+        configs = self._resolve_configs(region_codes, product_code=product_code)
         return [
             self._predict_from_context(
                 context=context,
@@ -784,13 +962,45 @@ class ShandongRegionalSpreadPredictor:
         scenario_text: str | None = None,
         enable_refined_news: bool = True,
         enable_event_risk: bool = True,
+        product_code: str = "GASOLINE_92",
     ) -> dict[str, list[PredictionResult]]:
         selected_horizons = horizons or DEFAULT_HORIZONS
-        configs = self._resolve_configs(region_codes)
-        result: dict[str, list[PredictionResult]] = {}
-        for horizon in selected_horizons:
-            horizon_config = resolve_horizon_config(horizon)
-            result[horizon] = [
+        configs = self._resolve_configs(region_codes, product_code=product_code)
+        cache_key = self._multi_prediction_cache_key(
+            as_of_date=as_of_date,
+            region_codes=[config.region_code for config in configs],
+            horizons=selected_horizons,
+            use_llm_explainer=use_llm_explainer,
+            scenario_text=scenario_text,
+            enable_refined_news=enable_refined_news,
+            enable_event_risk=enable_event_risk,
+            context_metadata=context.metadata,
+            product_code=product_code,
+        )
+        now = datetime.now()
+        cached = self._multi_prediction_cache.get(cache_key)
+        if cached and (now - cached[0]).total_seconds() <= self._multi_prediction_cache_seconds:
+            return {horizon: list(items) for horizon, items in cached[1].items()}
+        result: dict[str, list[PredictionResult]] = {horizon: [] for horizon in selected_horizons}
+        freight_settings = {item["region_code"]: item for item in self.list_freight_settings()}
+        regional_cache = {
+            (config.region_code, float((freight_settings.get(config.region_code) or {}).get("freight_value", REGIONAL_FREIGHT_ESTIMATES.get(config.region_code, 80.0)))): self._build_regional_history_cache(
+                frame=context.feature_frame,
+                config=config,
+                as_of_date=as_of_date,
+                freight_estimate=float((freight_settings.get(config.region_code) or {}).get("freight_value", REGIONAL_FREIGHT_ESTIMATES.get(config.region_code, 80.0))),
+            )
+            for config in configs
+        }
+        tasks: list[tuple[str, RegionalSpreadConfig, HorizonConfig]] = [
+            (horizon, config, resolve_horizon_config(horizon))
+            for horizon in selected_horizons
+            for config in configs
+        ]
+        if not tasks:
+            return result
+        for horizon, config, horizon_config in tasks:
+            result[horizon].append(
                 self._predict_from_context(
                     context=context,
                     config=config,
@@ -801,22 +1011,436 @@ class ShandongRegionalSpreadPredictor:
                     enable_refined_news=enable_refined_news,
                     enable_event_risk=enable_event_risk,
                     context_metadata=context.metadata,
+                    freight_settings=freight_settings,
+                    regional_cache=regional_cache,
                 )
-                for config in configs
-            ]
+            )
+        order = {config.region_code: index for index, config in enumerate(configs)}
+        for horizon in result:
+            result[horizon].sort(key=lambda item: order.get((item.raw_context or {}).get("counter_region_code") or item.region_code, 999))
+        self._multi_prediction_cache[cache_key] = (now, {horizon: list(items) for horizon, items in result.items()})
+        if len(self._multi_prediction_cache) > 12:
+            oldest_key = min(self._multi_prediction_cache, key=lambda key: self._multi_prediction_cache[key][0])
+            self._multi_prediction_cache.pop(oldest_key, None)
         return result
 
-    def _resolve_config(self, region_code: str) -> RegionalSpreadConfig:
-        normalized = region_code.strip().upper()
-        if normalized not in REGIONAL_SPREAD_CONFIGS:
-            supported = ", ".join(sorted(REGIONAL_SPREAD_CONFIGS))
-            raise ValueError(f"Unsupported region_code={region_code}. Supported: {supported}")
-        return REGIONAL_SPREAD_CONFIGS[normalized]
+    def _multi_prediction_cache_key(
+        self,
+        *,
+        as_of_date: date,
+        region_codes: list[str],
+        horizons: list[str],
+        use_llm_explainer: bool,
+        scenario_text: str | None,
+        enable_refined_news: bool,
+        enable_event_risk: bool,
+        context_metadata: dict[str, Any] | None,
+        product_code: str,
+    ) -> str:
+        payload = {
+            "as_of_date": as_of_date.isoformat(),
+            "region_codes": region_codes,
+            "horizons": horizons,
+            "product_code": product_code,
+            "use_llm_explainer": use_llm_explainer,
+            "scenario_text": scenario_text or "",
+            "enable_refined_news": enable_refined_news,
+            "enable_event_risk": enable_event_risk,
+            "market_data_mode": (context_metadata or {}).get("market_data_mode"),
+            "market_data_reason": (context_metadata or {}).get("market_data_reason"),
+            "regional_logic_version": "regionalized_shandong_required_v2",
+        }
+        return hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
 
-    def _resolve_configs(self, region_codes: list[str] | None) -> list[RegionalSpreadConfig]:
+    def _try_region_market_price_prediction(
+        self,
+        *,
+        context: PredictionContext,
+        config: RegionalSpreadConfig,
+        as_of_date: date,
+        horizon_config: HorizonConfig,
+        use_llm_explainer: bool,
+        scenario_text: str | None,
+        enable_refined_news: bool,
+        enable_event_risk: bool,
+        context_metadata: dict[str, Any] | None,
+        current_row: pd.Series,
+        current_region_price: float,
+        current_shandong_price: float,
+        current_spread_value: float,
+        freight_estimate: float,
+        freight_setting: dict[str, Any],
+        regional_inventory: dict[str, Any],
+    ) -> PredictionResult | None:
+        if self.outright_predictor is None:
+            return None
+        region_context, data_quality = self._build_region_market_prediction_context(
+            context=context,
+            config=config,
+            as_of_date=as_of_date,
+        )
+        try:
+            if config.product_code == "DIESEL_0_SPREAD":
+                prediction = self.outright_predictor.run_diesel0_prediction_from_context(
+                    context=region_context,
+                    as_of_date=as_of_date,
+                    horizon=horizon_config.code,
+                    use_llm_explainer=use_llm_explainer,
+                    scenario_text=scenario_text,
+                    enable_refined_news=enable_refined_news,
+                    enable_event_risk=enable_event_risk,
+                )
+            else:
+                prediction = self.outright_predictor.run_prediction_from_context(
+                    context=region_context,
+                    as_of_date=as_of_date,
+                    horizon=horizon_config.code,
+                    use_llm_explainer=use_llm_explainer,
+                    scenario_text=scenario_text,
+                    enable_refined_news=enable_refined_news,
+                    enable_event_risk=enable_event_risk,
+                )
+        except Exception as exc:
+            raise RuntimeError(f"regionalized_shandong_market_logic_failed: {exc}") from exc
+        raw_context = dict(prediction.raw_context or {})
+        business_scorecard = raw_context.get("business_scorecard")
+        if isinstance(business_scorecard, dict):
+            business_scorecard = self._augment_scorecard_with_region_quality(business_scorecard, data_quality)
+            raw_context["business_scorecard"] = business_scorecard
+            if isinstance(raw_context.get("business_scorecard_prediction"), dict):
+                raw_context["business_scorecard_prediction"]["scorecard"] = business_scorecard
+        raw_context.update(
+            {
+                "current_spread": round(current_spread_value, 2),
+                "spread_formula": f"\u76ee\u6807\u533a\u57df{config.product_label}\u4ef7\u683c-\u5c71\u4e1c{config.product_label}\u4ef7\u683c",
+                "current_shandong_price": round(current_shandong_price, 2),
+                "current_counter_region_price": round(current_region_price, 2),
+                "counter_region_code": config.region_code,
+                "counter_region_name": config.region_name,
+                "freight_estimate": round(freight_estimate, 2),
+                "freight_source": freight_setting.get("source_type", "default"),
+                "freight_components": freight_setting.get("components", []),
+                "regional_inventory": regional_inventory,
+                "regional_price_prediction_mode": "regionalized_shandong_market_logic",
+                "regional_price_prediction_formula": "\u590d\u523b\u5c71\u4e1c\u5e02\u573a\u4ef7\u9884\u6d4b\u903b\u8f91\uff1a\u4ef7\u683c/\u5f00\u5de5\u7387/\u5e93\u5b58/\u68c0\u4fee\u7b49\u5c71\u4e1c\u4e13\u5c5e\u5b57\u6bb5\u4f18\u5148\u66ff\u6362\u4e3a\u76ee\u6807\u533a\u57df\u5bf9\u5e94\u6570\u636e\uff1b\u7f3a\u5931\u5219\u5728\u8be6\u60c5\u4e2d\u663e\u793a\u7f3a\u5931\uff0c\u4e0d\u7528\u5c71\u4e1c\u6570\u636e\u66ff\u4ee3\u3002",
+                "regional_data_quality": data_quality,
+                "market_data_mode": (context_metadata or {}).get("market_data_mode"),
+                "market_data_reason": (context_metadata or {}).get("market_data_reason"),
+            }
+        )
+        business_prediction = raw_context.get("business_scorecard_prediction") or {}
+        raw_context["regional_composite_prediction"] = _regional_variant_from_outright_prediction(
+            prediction=prediction,
+            current_region_price=current_region_price,
+            current_shandong_price=current_region_price,
+            model_name="\u533a\u57df\u667a\u80fd\u4f53\u9884\u6d4b\uff08\u533a\u57df\u5316\u5c71\u4e1c\u903b\u8f91\uff09",
+            prediction_type="regional_composite",
+            shandong_prediction_source="\u533a\u57df\u5316\u5c71\u4e1c\u667a\u80fd\u4f53\u903b\u8f91",
+        )
+        if isinstance(business_prediction, dict) and business_prediction:
+            raw_context["regional_baseline_prediction"] = _regional_variant_from_business_prediction(
+                business_prediction=business_prediction,
+                scorecard=raw_context.get("business_scorecard"),
+                current_region_price=current_region_price,
+                current_shandong_price=current_region_price,
+                shandong_prediction_source="\u533a\u57df\u5316\u5c71\u4e1c\u4e1a\u52a1\u6253\u5206\u903b\u8f91",
+            )
+        raw_context["regional_prediction_variants"] = [
+            raw_context["regional_composite_prediction"],
+            *([raw_context["regional_baseline_prediction"]] if isinstance(raw_context.get("regional_baseline_prediction"), dict) else []),
+        ]
+        return prediction.model_copy(
+            update={
+                "run_id": f"regional-{config.region_code.lower()}-{prediction.run_id}",
+                "entity_code": config.entity_code,
+                "region_code": config.output_region_code,
+                "product_code": config.product_code,
+                "point_value": prediction.point_value,
+                "range_lower": prediction.range_lower,
+                "range_upper": prediction.range_upper,
+                "explanation": f"{config.region_name}{config.product_label}\u6309\u533a\u57df\u5316\u5c71\u4e1c\u903b\u8f91\u91cd\u7b97\uff1a\u5f53\u524d\u533a\u57df\u4ef7{current_region_price:.2f}\uff0c\u9884\u6d4b\u70b9\u4f4d{prediction.point_value:.2f}\u3002",
+                "raw_context": raw_context,
+            }
+        )
+
+    def _augment_scorecard_with_region_quality(self, scorecard: dict[str, Any], data_quality: dict[str, Any]) -> dict[str, Any]:
+        result = dict(scorecard)
+        result["groups"] = [
+            group
+            for group in list(result.get("groups") or [])
+            if str(group.get("group_code") or "") not in {"regional_data_mapping", "regional_agent_missing"}
+        ]
+        quality = dict(result.get("data_quality") or {})
+        quality["regional_available_count"] = data_quality.get("available_count")
+        quality["regional_missing_count"] = data_quality.get("missing_count")
+        quality["regional_missing_items"] = list(data_quality.get("missing_items") or [])
+        result["data_quality"] = quality
+        result["unresolved_items"] = [
+            item
+            for item in list(result.get("unresolved_items") or [])
+            if str(item.get("group_code") or "") not in {"regional_data_mapping", "regional_agent_missing"}
+        ]
+        return result
+
+    def _build_region_market_prediction_context(
+        self,
+        *,
+        context: PredictionContext,
+        config: RegionalSpreadConfig,
+        as_of_date: date,
+    ) -> tuple[PredictionContext, dict[str, Any]]:
+        frame = context.feature_frame.copy()
+        replacements: list[dict[str, Any]] = []
+        missing: list[dict[str, Any]] = []
+        price_target = "sd_diesel0_market" if config.product_code == "DIESEL_0_SPREAD" else "sd_gas92_market"
+        self._copy_series_for_region(frame, source=config.price_column, target=price_target, replacements=replacements, missing=missing, label="\u533a\u57df\u5e02\u573a\u4ef7")
+        region_prefix = self._region_feature_prefix(config.region_code)
+        cdu_col = f"{region_prefix}_cdu_utilization_weekly" if region_prefix else None
+        if cdu_col:
+            self._copy_series_for_region(frame, source=cdu_col, target="shandong_cdu_utilization_weekly", replacements=replacements, missing=missing, label="\u533a\u57df\u5e38\u51cf\u538b\u5f00\u5de5\u7387")
+            if cdu_col in frame.columns:
+                frame["shandong_cdu_utilization_percentile_weekly"] = self._expanding_percentile_since_frame(frame, frame[cdu_col])
+                frame["shandong_cdu_utilization_percentile_monthly"] = frame["shandong_cdu_utilization_percentile_weekly"]
+                frame["regional_cdu_utilization_weekly"] = frame[cdu_col]
+                frame["regional_cdu_utilization_change_weekly"] = self._change_from_previous_observation_local(frame[cdu_col])
+                frame["regional_cdu_utilization_percentile_weekly"] = frame["shandong_cdu_utilization_percentile_weekly"]
+                replacements.append({"field": "shandong_cdu_utilization_percentile_weekly", "source": cdu_col, "label": "\u533a\u57df\u5f00\u5de5\u7387\u5206\u4f4d"})
+        shipment_col = self._regional_shipments_column(config=config, region_prefix=region_prefix)
+        if shipment_col:
+            self._copy_series_for_region(frame, source=shipment_col, target="regional_shipments_weekly", replacements=replacements, missing=missing, label="\u533a\u57df\u51fa\u8d27\u91cf")
+            if shipment_col in frame.columns:
+                frame["regional_shipments_change_weekly"] = self._change_from_previous_observation_local(frame[shipment_col])
+                replacements.append({"field": "regional_shipments_change_weekly", "source": shipment_col, "label": "\u533a\u57df\u51fa\u8d27\u91cf\u73af\u6bd4"})
+        self._apply_region_inventory_features(
+            frame=frame,
+            config=config,
+            as_of_date=as_of_date,
+            replacements=replacements,
+            missing=missing,
+        )
+        regional_plan = self._regional_maintenance_plan(config=config, as_of_date=as_of_date)
+        metadata = dict(context.metadata or {})
+        if regional_plan:
+            metadata["oilchem_maintenance_plan"] = regional_plan
+            replacements.append({"field": "oilchem_maintenance_plan", "source": regional_plan.get("source"), "label": "\u533a\u57df\u68c0\u4fee\u8ba1\u5212"})
+        else:
+            missing.append({"field": "oilchem_maintenance_plan", "reason": "\u672a\u627e\u5230\u76ee\u6807\u533a\u57df\u5730\u65b9/\u4e3b\u8425\u70bc\u5382\u68c0\u4fee\u8ba1\u5212"})
+        current_frame = frame[frame["date"] <= as_of_date]
+        current_row = current_frame.iloc[-1]
+        data_quality = {
+            "mode": "regionalized_shandong_market_logic",
+            "region_code": config.region_code,
+            "region_name": config.region_name,
+            "replacements": replacements,
+            "missing_items": missing,
+            "available_count": len(replacements),
+            "missing_count": len(missing),
+            "note": "\u5c71\u4e1c\u4e13\u5c5e\u5b57\u6bb5\u4f18\u5148\u66ff\u6362\u4e3a\u76ee\u6807\u533a\u57df\u5bf9\u5e94\u6570\u636e\uff1b\u627e\u4e0d\u5230\u5219\u663e\u793a\u7f3a\u5931\uff0c\u4e0d\u7528\u5c71\u4e1c\u6570\u636e\u66ff\u4ee3\u3002",
+        }
+        metadata["regionalized_data_quality"] = data_quality
+        return PredictionContext(
+            feature_frame=frame,
+            current_row=current_row,
+            report_payload=context.report_payload,
+            news_items=context.news_items,
+            refined_news_items=context.refined_news_items,
+            policy_items=context.policy_items,
+            metadata=metadata,
+        ), data_quality
+
+    def _copy_series_for_region(self, frame: pd.DataFrame, *, source: str | None, target: str, replacements: list[dict[str, Any]], missing: list[dict[str, Any]], label: str) -> None:
+        if source and source in frame.columns and pd.to_numeric(frame[source], errors="coerce").notna().any():
+            frame[target] = frame[source]
+            replacements.append({"field": target, "source": source, "label": label})
+        else:
+            missing.append({"field": target, "source": source, "reason": f"{label}\u7f3a\u5931"})
+
+    def _region_feature_prefix(self, region_code: str) -> str | None:
+        return {
+            "EAST_CHINA": "east_china",
+            "NORTH_CHINA": "north_china",
+            "SOUTH_CHINA": "south_china",
+            "CENTRAL_CHINA": "central_china",
+            "NORTHWEST": "northwest",
+            "SOUTHWEST": "southwest",
+            "NORTHEAST": "northeast",
+        }.get(region_code)
+
+    def _regional_shipments_column(self, *, config: RegionalSpreadConfig, region_prefix: str | None) -> str | None:
+        if not region_prefix:
+            return None
+        product_prefix = "diesel" if config.product_code == "DIESEL_0_SPREAD" else "gasoline"
+        return f"{region_prefix}_{product_prefix}_shipments_weekly"
+
+    def _expanding_percentile_since_frame(self, frame: pd.DataFrame, series: pd.Series, *, min_periods: int = 5) -> pd.Series:
+        source = pd.to_numeric(series, errors="coerce")
+        result = pd.Series(np.nan, index=frame.index, dtype="float64")
+        dates = pd.to_datetime(frame["date"], errors="coerce").dt.date
+        mask = dates >= date(2024, 1, 1)
+        if not bool(mask.any()):
+            return result
+        values = []
+        for idx, value in source.loc[mask].items():
+            if pd.isna(value):
+                result.loc[idx] = np.nan
+                continue
+            values.append(float(value))
+            if len(values) >= min_periods:
+                result.loc[idx] = 100.0 * sum(item <= float(value) for item in values) / len(values)
+        return result
+
+    def _change_from_previous_observation_local(self, series: pd.Series) -> pd.Series:
+        numeric = pd.to_numeric(series, errors="coerce")
+        observed_mask = numeric.notna() & numeric.ne(numeric.shift())
+        observed = numeric.where(observed_mask)
+        previous_observed = observed.ffill().shift()
+        return (observed - previous_observed).where(observed_mask)
+
+    def _apply_region_inventory_features(self, *, frame: pd.DataFrame, config: RegionalSpreadConfig, as_of_date: date, replacements: list[dict[str, Any]], missing: list[dict[str, Any]]) -> None:
+        rows = self._load_regional_inventory_rows(as_of_date=as_of_date)
+        product = "\u67f4\u6cb9" if config.product_code == "DIESEL_0_SPREAD" else "\u6c7d\u6cb9"
+        region_token = f"{config.region_name}\u5730\u533a"
+        if config.region_name == "\u4e1c\u5317":
+            region_token = "东北地区"
+        series_by_project: dict[int, pd.Series] = {}
+        for project_id in self._regional_inventory_project_ids(product=product):
+            series = self._regional_inventory_series(rows=rows, project_id=project_id, region_token=region_token)
+            if series is not None:
+                series_by_project[project_id] = series.reindex(pd.to_datetime(frame["date"]).dt.date).ffill().astype(float)
+        main_ids = (12891,) if product == "柴油" else (12887,)
+        trader_ids = (12981, 12945) if product == "柴油" else (12975, 12944)
+        main = next((series_by_project[pid] for pid in main_ids if pid in series_by_project), None)
+        trader = next((series_by_project[pid] for pid in trader_ids if pid in series_by_project), None)
+        components = []
+        if main is not None:
+            frame["shandong_main_company_inventory"] = main.values
+            frame["shandong_main_company_inventory_change_weekly"] = self._change_from_previous_observation_local(frame["shandong_main_company_inventory"])
+            frame["shandong_main_company_inventory_percentile_monthly"] = self._expanding_percentile_since_frame(frame, frame["shandong_main_company_inventory"])
+            replacements.append({"field": "shandong_main_company_inventory", "source": "oilchem regional main inventory", "label": "\u533a\u57df\u4e3b\u8425\u5e93\u5b58"})
+            components.append(frame["shandong_main_company_inventory"])
+        else:
+            missing.append({"field": "shandong_main_company_inventory", "reason": "\u672a\u627e\u5230\u76ee\u6807\u533a\u57df\u4e3b\u8425\u5e93\u5b58"})
+        if trader is not None:
+            frame["shandong_trade_company_inventory"] = trader.values
+            replacements.append({"field": "shandong_trade_company_inventory", "source": "oilchem regional trader inventory", "label": "\u533a\u57df\u8d38\u6613\u5546\u5e93\u5b58"})
+            components.append(frame["shandong_trade_company_inventory"])
+        else:
+            missing.append({"field": "shandong_trade_company_inventory", "reason": "\u672a\u627e\u5230\u76ee\u6807\u533a\u57df\u8d38\u6613\u5546\u5e93\u5b58"})
+        independent = self._regional_refinery_inventory_series(frame=frame, config=config, as_of_date=as_of_date)
+        if independent is not None:
+            frame["shandong_independent_refinery_inventory"] = independent.values
+            frame["refinery_inventory_monthly"] = independent.values
+            frame["shandong_refinery_inventory_change_weekly"] = self._change_from_previous_observation_local(frame["shandong_independent_refinery_inventory"])
+            frame["shandong_refinery_inventory_percentile_monthly"] = self._expanding_percentile_since_frame(frame, frame["shandong_independent_refinery_inventory"])
+            if config.product_code == "DIESEL_0_SPREAD":
+                frame["shandong_diesel_inventory_change_mom"] = frame["shandong_refinery_inventory_change_weekly"]
+                frame["shandong_diesel_refinery_inventory_percentile_monthly"] = frame["shandong_refinery_inventory_percentile_monthly"]
+            else:
+                frame["shandong_gasoline_inventory_change_mom"] = frame["shandong_refinery_inventory_change_weekly"]
+            replacements.append({"field": "shandong_independent_refinery_inventory", "source": "ganglian regional refinery inventory", "label": "\u533a\u57df\u72ec\u7acb\u70bc\u5382\u5382\u5185\u5e93\u5b58"})
+            components.append(frame["shandong_independent_refinery_inventory"])
+        else:
+            independent_missing_reason = "\u672a\u627e\u5230\u76ee\u6807\u533a\u57df\u5382\u5185\u5e93\u5b58\uff1a\u72ec\u7acb\u70bc\u5382\uff08\u5468\uff09\uff0c\u672c\u9879\u4e0d\u7528\u5c71\u4e1c\u6216\u4e3b\u8425\u5e93\u5b58\u66ff\u4ee3"
+            for field in (
+                "shandong_independent_refinery_inventory",
+                "shandong_refinery_inventory_change_weekly",
+                "shandong_refinery_inventory_percentile_monthly",
+                "shandong_gasoline_inventory_change_mom",
+                "shandong_diesel_inventory_change_mom",
+                "refinery_inventory_monthly",
+            ):
+                frame[field] = np.nan
+            missing.append({"field": "shandong_independent_refinery_inventory", "reason": independent_missing_reason})
+        if components:
+            total = pd.concat(components, axis=1).sum(axis=1, min_count=1)
+            frame["shandong_product_inventory_total_formal"] = total
+            frame["shandong_product_inventory_change_weekly"] = self._change_from_previous_observation_local(total)
+            frame["shandong_product_inventory_percentile_weekly"] = self._expanding_percentile_since_frame(frame, total)
+            replacements.append({"field": "shandong_product_inventory_percentile_weekly", "source": "regional available inventory sum", "label": "\u533a\u57df\u53ef\u7528\u5e93\u5b58\u5408\u8ba1\u5206\u4f4d"})
+
+    def _regional_refinery_inventory_series(self, *, frame: pd.DataFrame, config: RegionalSpreadConfig, as_of_date: date) -> pd.Series | None:
+        product_key = "DIESEL_0" if config.product_code == "DIESEL_0_SPREAD" else "GASOLINE_92"
+        indicator_code = REGIONAL_REFINERY_INVENTORY_INDICATORS.get(product_key, {}).get(config.region_code)
+        if not indicator_code or not self.snapshot_repository:
+            return None
+        try:
+            rows = self.snapshot_repository.load_market_timeseries_values(
+                source_code="ganglian_excel_import",
+                indicator_codes=[indicator_code],
+                start_date=date(2024, 1, 1),
+                end_date=as_of_date,
+            )
+        except Exception:
+            return None
+        values: dict[date, float] = {}
+        for row in rows:
+            row_date = row.get("dt")
+            value = row.get("value_num")
+            if row_date is None or value is None:
+                continue
+            if not isinstance(row_date, date):
+                try:
+                    row_date = pd.Timestamp(row_date).date()
+                except Exception:
+                    continue
+            values[row_date] = float(value)
+        if not values:
+            return None
+        series = pd.Series(values).sort_index()
+        frame_dates = pd.to_datetime(frame["date"], errors="coerce").dt.date
+        aligned = series.reindex(frame_dates).ffill()
+        if not aligned.notna().any():
+            return None
+        return pd.Series(aligned.to_numpy(dtype="float64"), index=frame.index)
+
+    def _regional_inventory_project_ids(self, *, product: str) -> tuple[int, ...]:
+        return (12891, 12981, 12945) if product == "\u67f4\u6cb9" else (12887, 12975, 12944)
+
+    def _regional_inventory_series(self, *, rows: list[dict[str, Any]], project_id: int, region_token: str) -> pd.Series | None:
+        values: dict[date, float] = {}
+        for row in rows:
+            if row.get("project_quota_id") != project_id:
+                continue
+            if region_token not in str(row.get("region") or ""):
+                continue
+            parsed = self._parse_date_text(row.get("date"))
+            value = self._float_or_none(row.get("value"))
+            if parsed is not None and value is not None:
+                values[parsed] = value
+        if not values:
+            return None
+        return pd.Series(values).sort_index()
+
+    def _regional_maintenance_plan(self, *, config: RegionalSpreadConfig, as_of_date: date) -> dict[str, Any] | None:
+        try:
+            records = self.dataset_service._load_archived_oilchem_records(
+                source_codes=["oilchem_local_refinery_maintenance_plan", "oilchem_main_refinery_maintenance_plan"],
+                end_date=as_of_date,
+                limit_per_source=10,
+            )
+            return self.dataset_service._aggregate_maintenance_plan(records=records, as_of_date=as_of_date, target_region=config.region_name)
+        except Exception:
+            return None
+
+    def _config_map(self, product_code: str = "GASOLINE_92") -> dict[str, RegionalSpreadConfig]:
+        normalized = (product_code or "GASOLINE_92").strip().upper()
+        if normalized in {"DIESEL_0", "DIESEL_0_SPREAD", "DIESEL0"}:
+            return DIESEL_REGIONAL_SPREAD_CONFIGS
+        return REGIONAL_SPREAD_CONFIGS
+
+    def _resolve_config(self, region_code: str, product_code: str = "GASOLINE_92") -> RegionalSpreadConfig:
+        normalized = region_code.strip().upper()
+        config_map = self._config_map(product_code)
+        if normalized not in config_map:
+            supported = ", ".join(sorted(config_map))
+            raise ValueError(f"Unsupported region_code={region_code}. Supported: {supported}")
+        return config_map[normalized]
+
+    def _resolve_configs(self, region_codes: list[str] | None, product_code: str = "GASOLINE_92") -> list[RegionalSpreadConfig]:
+        config_map = self._config_map(product_code)
         if not region_codes:
-            return list(REGIONAL_SPREAD_CONFIGS.values())
-        return [self._resolve_config(region_code) for region_code in region_codes]
+            return list(config_map.values())
+        return [self._resolve_config(region_code, product_code=product_code) for region_code in region_codes]
 
     def list_freight_settings(self) -> list[dict[str, Any]]:
         return self._component_settings_grouped()
@@ -882,6 +1506,8 @@ class ShandongRegionalSpreadPredictor:
         enable_refined_news: bool,
         enable_event_risk: bool,
         context_metadata: dict[str, Any] | None,
+        freight_settings: dict[str, dict[str, Any]] | None = None,
+        regional_cache: dict[tuple[str, float], dict[str, Any]] | None = None,
     ) -> PredictionResult:
         feature_frame = context.feature_frame.copy()
         current_frame = feature_frame[feature_frame["date"] <= as_of_date]
@@ -893,275 +1519,42 @@ class ShandongRegionalSpreadPredictor:
         counter_region_price = current_row.get("target_region_price")
         if pd.isna(current_spread) or pd.isna(counter_region_price):
             raise RuntimeError(f"Missing region price history for {config.region_name} on or before {as_of_date}.")
-        freight_setting = self._freight_setting_for(config)
+        freight_setting = (freight_settings or {}).get(config.region_code) or self._freight_setting_for(config)
         freight_estimate = float(freight_setting.get("freight_value", REGIONAL_FREIGHT_ESTIMATES.get(config.region_code, 80.0)))
         regional_inventory = self._regional_inventory_context(config=config, as_of_date=as_of_date)
-
-        claims, score_value = self._score_row(
-            current_row,
-            extra={
-                "as_of_date": as_of_date,
-                "report_payload": context.report_payload,
-                "news_items": context.news_items,
-                "refined_news_items": context.refined_news_items,
-                "policy_items": context.policy_items,
-                "scenario_text": scenario_text,
-                "mode": "predict",
-                "prediction_subject": "regional_spread",
-                "enable_refined_news": enable_refined_news,
-                "enable_event_risk": enable_event_risk,
-                "target_region_code": config.region_code,
-                "target_region_name": config.region_name,
-                "freight_estimate": freight_estimate,
-                "regional_inventory": regional_inventory,
-            },
-        )
-        current_agent_scores = {
-            claim.agent_name: float(claim.numeric_signals.get("score", 0.0))
-            for claim in claims
-        }
-
-        current_spread_value = float(current_spread)
-        expert_delta = self._expert_regional_delta(
-            frame=feature_frame,
-            config=config,
-            row=current_row,
-            as_of_date=as_of_date,
-            freight_estimate=freight_estimate,
-            regional_inventory=regional_inventory,
-            horizon_config=horizon_config,
-        )
-        predicted_delta = expert_delta["predicted_delta"]
-        point_value = current_spread_value + predicted_delta
-        baseline_prediction = self._regional_baseline_prediction(
-            current_spread=current_spread_value,
-            rule_delta=expert_delta["rule_delta"],
-            operating_bounds=expert_delta["operating_bounds"],
-            regional_inventory=regional_inventory,
-            horizon_config=horizon_config,
-        )
-        range_half_width = self._regional_expert_range_half_width(
-            expert_delta=expert_delta,
-            regional_inventory=regional_inventory,
-            horizon_config=horizon_config,
-        )
-        risk_range_half_width = range_half_width
-        range_basis = {
-            "core_label": "经营参考区间",
-            "risk_label": "专家规则风险区间",
-            "historical_error_available": False,
-            "reason": "区域价差不再使用历史拟合系数生成点位；区间来自周期基础半宽、因子分歧和数据缺口。",
-        }
-        direction_threshold = self._regional_direction_threshold(horizon_config)
-        direction_label = self._direction_from_delta(predicted_delta, threshold=direction_threshold)
-        probabilities = self._probabilities_from_score(score_value)
-        confidence_label, confidence_score, confidence_components = build_reliability_score(
-            claims=claims,
-            predicted_delta=predicted_delta,
-            direction_label=direction_label,
-            range_half_width=range_half_width,
-            direction_threshold=direction_threshold,
-            calibration_rmse=range_half_width,
-            sample_size=0,
-            context_metadata=context_metadata,
-        )
-        current_netback_spread = float(counter_region_price) - float(current_row["sd_gas92_market"]) - freight_estimate
-        predicted_netback_spread = point_value - freight_estimate
-        freight_review_required = self._freight_review_required(freight_setting)
-        trade_action = self._trade_action_from_netback_spread(
-            netback_spread=predicted_netback_spread,
-            freight_review_required=freight_review_required,
+        if self.outright_predictor is not None:
+            regionalized = self._try_region_market_price_prediction(
+                context=context,
+                config=config,
+                as_of_date=as_of_date,
+                horizon_config=horizon_config,
+                use_llm_explainer=use_llm_explainer,
+                scenario_text=scenario_text,
+                enable_refined_news=enable_refined_news,
+                enable_event_risk=enable_event_risk,
+                context_metadata=context_metadata,
+                current_row=current_row,
+                current_region_price=float(counter_region_price),
+                current_shandong_price=float(current_row[config.shandong_price_column]),
+                current_spread_value=float(current_spread),
+                freight_estimate=freight_estimate,
+                freight_setting=freight_setting,
+                regional_inventory=regional_inventory,
+            )
+            if regionalized is not None:
+                return regionalized
+        raise RuntimeError(
+            "regionalized_shandong_market_logic_required: region price prediction must reuse Shandong market price logic; old regional spread fallback is disabled"
         )
 
-        raw_context = {
-            "current_spread": round(current_spread_value, 2),
-            "spread_formula": "目标区域92#价格-山东92#价格",
-            "predicted_delta": round(predicted_delta, 4),
-            "score_value": round(score_value, 4),
-            "current_agent_scores": current_agent_scores,
-            "prediction_method": expert_delta["method"],
-            "prediction_method_note": "区域价差点位由冻结状态表价差变化中位数作为主点位，叠加当日规则修正，并用经营上下边界约束；状态样本不足时降级为规则修正。",
-            "expert_delta": expert_delta,
-            "regional_composite_prediction": {
-                "model_name": "区域智能体综合预测",
-                "prediction_type": "regional_composite",
-                "direction_label": direction_label,
-                "score": round(score_value, 4),
-                "predicted_delta": round(predicted_delta, 4),
-                "predicted_region_minus_shandong_spread": round(point_value, 2),
-                "predicted_region_minus_shandong_spread_range_lower": round(point_value - range_half_width, 2),
-                "predicted_region_minus_shandong_spread_range_upper": round(point_value + range_half_width, 2),
-                "range_half_width": round(range_half_width, 4),
-                "method": expert_delta["method"],
-                "basis": "状态表同状态价差变化中位数作为主点位，叠加区域规则智能体修正，并受经营上下边界约束。",
-                "calculation": expert_delta.get("calculation"),
-            },
-            "regional_baseline_prediction": baseline_prediction,
-            "core_range_half_width": round(range_half_width, 4),
-            "risk_range_half_width": round(risk_range_half_width, 4),
-            "risk_range_lower": round(point_value - risk_range_half_width, 2),
-            "risk_range_upper": round(point_value + risk_range_half_width, 2),
-            "range_basis": range_basis,
-            "historical_error_half_width": None,
-            "historical_error_lower": None,
-            "historical_error_upper": None,
-            "current_shandong_price": round(float(current_row["sd_gas92_market"]), 2),
-            "current_counter_region_price": round(float(counter_region_price), 2),
-            "freight_estimate": round(freight_estimate, 2),
-            "freight_source": freight_setting.get("source_type", "default"),
-            "freight_updated_at": freight_setting.get("updated_at"),
-            "freight_updated_by": freight_setting.get("updated_by"),
-            "freight_as_of_date": freight_setting.get("as_of_date"),
-            "freight_components": freight_setting.get("components", []),
-            "freight_calculation": freight_setting.get("calculation"),
-            "freight_workbook_value": freight_setting.get("workbook_value"),
-            "regional_inventory": regional_inventory,
-            "netback_spread": round(current_netback_spread, 2),
-            "predicted_netback_spread": round(predicted_netback_spread, 2),
-            "trade_action": trade_action,
-            "freight_review_required": freight_review_required,
-            "netback_quality": "手工运费优先，未录入时默认估算",
-            "counter_region_code": config.region_code,
-            "counter_region_name": config.region_name,
-            "spread_column": config.spread_column,
-            "spread_change_1d": self._round_or_none(current_row.get("target_region_spread_change_1d")),
-            "spread_change_3d": self._round_or_none(current_row.get("target_region_spread_change_3d")),
-            "probabilities": probabilities,
-            "switches": {
-                "enable_refined_news": enable_refined_news,
-                "enable_event_risk": enable_event_risk,
-            },
-            "calibration": {
-                "status": "disabled",
-                "reason": "区域价差点位不使用历史回归系数、截距或斜率拟合。",
-                "mode": expert_delta["method"],
-            },
-            "confidence_components": confidence_components,
-            "refined_news_count": len(context.refined_news_items),
-            "event_news_count": len(context.news_items),
-            "policy_notice_count": len(context.policy_items),
-            "horizon_steps": horizon_config.steps,
-            "horizon_label": horizon_config.label,
-            "target_mode": "endpoint_spread",
-            "runtime_controls": {
-                claim.agent_name: claim.structured_payload.get("runtime_control", {}) for claim in claims
-            },
-            "market_data_mode": (context_metadata or {}).get("market_data_mode"),
-            "market_data_reason": (context_metadata or {}).get("market_data_reason"),
-        }
-        input_hash = self._build_input_hash(
-            {
-                "entity_code": config.entity_code,
-                "region_code": config.output_region_code,
-                "product_code": "GASOLINE_92_SPREAD",
-                "horizon": horizon_config.code,
-                "as_of_date": as_of_date.isoformat(),
-                "scenario_text": scenario_text or "",
-                "score_value": round(score_value, 4),
-                "raw_context": raw_context,
-            }
-        )
-        raw_context["input_hash"] = input_hash
-        llm_agent_claims = build_llm_agent_claims(
-            llm_client=self.llm_client,
-            enabled=use_llm_explainer,
-            subject=f"山东-目标区域92#价差 {config.region_name} {horizon_config.code}",
-            as_of_date=as_of_date,
-            horizon=horizon_config.code,
-            direction_label=direction_label,
-            point_value=point_value,
-            range_lower=point_value - range_half_width,
-            range_upper=point_value + range_half_width,
-            score_value=score_value,
-            deterministic_claims=claims,
-            raw_context=raw_context,
-        )
-        raw_context["llm_agent_reviews"] = [claim.model_dump(mode="json") for claim in llm_agent_claims]
-
-        fallback_explanation = self._build_explanation(
-            config=config,
-            claims=claims,
-            current_spread=current_spread_value,
-            score_value=score_value,
-            point_value=point_value,
-            range_lower=point_value - range_half_width,
-            range_upper=point_value + range_half_width,
-            direction_label=direction_label,
-            horizon_config=horizon_config,
-        )
-        fallback_driver_summary = build_driver_summary(claims)
-        fallback_operating_advice = build_spread_advice(
-            region_name=config.region_name,
-            direction_label=direction_label,
-            current_spread=current_spread_value,
-            point_value=point_value,
-            current_shandong_price=float(current_row["sd_gas92_market"]),
-            current_counter_region_price=float(counter_region_price),
-            freight_estimate=freight_estimate,
-            confidence_label=confidence_label,
-            claims=claims,
-            freight_review_required=freight_review_required,
-            trade_action=trade_action,
-        )
-        narrative = enrich_prediction_narrative(
-            llm_client=self.llm_client,
-            enabled=use_llm_explainer,
-            subject=f"{config.region_name}-山东92#价差 {horizon_config.code}",
-            direction_label=direction_label,
-            point_value=round(point_value, 2),
-            range_lower=round(point_value - range_half_width, 2),
-            range_upper=round(point_value + range_half_width, 2),
-            confidence_label=confidence_label,
-            confidence_score=round(confidence_score, 4),
-            score_value=round(score_value, 4),
-            fallback_explanation=fallback_explanation,
-            fallback_driver_summary=fallback_driver_summary,
-            fallback_operating_advice=fallback_operating_advice,
-            claims=claims,
-            raw_context=raw_context,
-            scenario_text=scenario_text,
-        )
-
-        factor_breakdown = [
-            {
-                "factor_group": claim.agent_name,
-                "factor_name": claim.agent_name,
-                "factor_score": round(float(claim.numeric_signals.get("raw_score", 0.0)), 4),
-                "contribution": round(float(claim.numeric_signals.get("weighted_score", 0.0)), 4),
-                "evidence": claim.evidence,
-            }
-            for claim in claims
-        ]
-
-        return PredictionResult(
-            run_id=f"sdspread-{config.region_code.lower()}-{input_hash[:12]}",
-            entity_code=config.entity_code,
-            region_code=config.output_region_code,
-            product_code="GASOLINE_92_SPREAD",
-            horizon=horizon_config.code,
-            as_of_date=as_of_date,
-            target_date=horizon_config.target_date_from(as_of_date),
-            direction_label=direction_label,
-            point_value=round(point_value, 2),
-            range_lower=round(point_value - range_half_width, 2),
-            range_upper=round(point_value + range_half_width, 2),
-            confidence_label=confidence_label,
-            confidence_score=round(confidence_score, 4),
-            score_value=round(score_value, 4),
-            degrade_flag=bool((context_metadata or {}).get("market_data_mode") != "eta"),
-            degrade_reason=(context_metadata or {}).get("market_data_reason"),
-            factor_breakdown=factor_breakdown,
-            agent_claims=[*claims, *llm_agent_claims],
-            driver_summary=narrative.driver_summary,
-            operating_advice=narrative.operating_advice,
-            explanation=narrative.explanation,
-            raw_context=raw_context,
-        )
+        # Region price prediction must use the regionalized Shandong outright logic above.
+        # The previous regional-spread fallback is intentionally disabled so no custom
+        # spread/netback/inventory score can diverge from the Shandong scoring logic.
 
     def _enrich_row(self, row: pd.Series, config: RegionalSpreadConfig) -> pd.Series:
         enriched = row.copy()
         target_price = row.get(config.price_column)
-        shandong_price = row.get("sd_gas92_market")
+        shandong_price = row.get(config.shandong_price_column)
         enriched["target_region_price"] = target_price
         if pd.notna(target_price) and pd.notna(shandong_price):
             enriched["target_region_spread"] = float(target_price) - float(shandong_price)
@@ -1218,205 +1611,6 @@ class ShandongRegionalSpreadPredictor:
         }.get(horizon_config.code, 1.0)
         return round(float(score_value) * horizon_multiplier, 4)
 
-    def _expert_regional_delta(
-        self,
-        *,
-        frame: pd.DataFrame,
-        config: RegionalSpreadConfig,
-        row: pd.Series,
-        as_of_date: date,
-        freight_estimate: float,
-        regional_inventory: dict[str, Any],
-        horizon_config: HorizonConfig,
-    ) -> dict[str, Any]:
-        current_spread = self._float_or_none(row.get("target_region_spread")) or 0.0
-        state_delta = self._regional_state_table_delta(
-            frame=frame,
-            config=config,
-            current_row=row,
-            as_of_date=as_of_date,
-            freight_estimate=freight_estimate,
-            horizon_config=horizon_config,
-        )
-        rule_delta = self._regional_rule_delta(
-            row=row,
-            freight_estimate=freight_estimate,
-            regional_inventory=regional_inventory,
-            horizon_config=horizon_config,
-        )
-        bounds = self._regional_operating_bounds(
-            frame=frame,
-            config=config,
-            as_of_date=as_of_date,
-            freight_estimate=freight_estimate,
-        )
-        if state_delta["status"] == "enabled":
-            weight = REGIONAL_RULE_CORRECTION_WEIGHT
-            raw_delta = float(state_delta["median_delta"]) + weight * float(rule_delta["predicted_delta"])
-            method = "state_median_plus_rule_correction"
-        else:
-            weight = 1.0
-            raw_delta = float(rule_delta["predicted_delta"])
-            method = "rule_correction_fallback"
-        raw_point = current_spread + raw_delta
-        bounded_point = self._clip(raw_point, bounds["lower"], bounds["upper"])
-        predicted_delta = bounded_point - current_spread
-        return {
-            "method": method,
-            "formula": "预测变化量=状态表价差变化中位数+当日规则修正；预测价差再受经营上下边界约束。状态样本不足时降级为规则修正。",
-            "current_spread": round(current_spread, 4),
-            "state_delta": state_delta,
-            "rule_delta": rule_delta,
-            "rule_correction_weight": weight,
-            "operating_bounds": bounds,
-            "raw_predicted_spread": round(raw_point, 4),
-            "bounded_predicted_spread": round(bounded_point, 4),
-            "predicted_delta": round(predicted_delta, 4),
-            "calculation": (
-                f"{state_delta.get('median_delta', 0.0)} + {weight} × {rule_delta['predicted_delta']}；"
-                f"价差边界[{bounds['lower']}, {bounds['upper']}]，得到变化{round(predicted_delta, 4)}"
-            ),
-        }
-
-    def _regional_rule_delta(
-        self,
-        *,
-        row: pd.Series,
-        freight_estimate: float,
-        regional_inventory: dict[str, Any],
-        horizon_config: HorizonConfig,
-    ) -> dict[str, Any]:
-        current_spread = self._float_or_none(row.get("target_region_spread")) or 0.0
-        change_1d = self._float_or_none(row.get("target_region_spread_change_1d")) or 0.0
-        change_3d = self._float_or_none(row.get("target_region_spread_change_3d")) or 0.0
-        netback_spread = current_spread - freight_estimate
-
-        momentum_delta = self._clip(change_3d * 0.45 + change_1d * 0.25, -6.0, 6.0)
-        structure_reversion = 0.0
-        if current_spread >= 160.0:
-            structure_reversion = -5.0
-        elif current_spread >= 120.0:
-            structure_reversion = -3.0
-        elif current_spread >= 80.0:
-            structure_reversion = -1.0
-        elif current_spread <= 0.0:
-            structure_reversion = 4.0
-        elif current_spread <= 30.0:
-            structure_reversion = 2.0
-
-        netback_delta = 0.0
-        if netback_spread >= 80.0:
-            netback_delta = -4.0
-        elif netback_spread >= 40.0:
-            netback_delta = -2.0
-        elif netback_spread >= 0.0:
-            netback_delta = -1.0
-
-        inventory_delta = 0.0
-        inventory_ratio = regional_inventory.get("ratio_to_median") if regional_inventory.get("available") else None
-        inventory_wow = regional_inventory.get("wow_change") if regional_inventory.get("available") else None
-        if inventory_ratio is not None:
-            inventory_ratio = float(inventory_ratio)
-            if inventory_ratio >= 1.25:
-                inventory_delta -= 4.0
-            elif inventory_ratio >= 1.12:
-                inventory_delta -= 2.0
-            elif inventory_ratio <= 0.75:
-                inventory_delta += 4.0
-            elif inventory_ratio <= 0.88:
-                inventory_delta += 2.0
-        if inventory_wow is not None:
-            inventory_wow = float(inventory_wow)
-            if inventory_wow >= 5.0:
-                inventory_delta -= 1.5
-            elif inventory_wow <= -5.0:
-                inventory_delta += 1.5
-
-        raw_d1_delta = momentum_delta + structure_reversion + netback_delta + inventory_delta
-        horizon_multiplier = {
-            "D1": 1.0,
-            "D3": 1.6,
-            "W1": 2.4,
-            "M1": 4.0,
-        }.get(horizon_config.code, 1.0)
-        horizon_cap = {
-            "D1": 12.0,
-            "D3": 22.0,
-            "W1": 35.0,
-            "M1": 50.0,
-        }.get(horizon_config.code, 12.0)
-        predicted_delta = self._clip(raw_d1_delta * horizon_multiplier, -horizon_cap, horizon_cap)
-        contributions = {
-            "momentum_delta": round(momentum_delta, 4),
-            "structure_reversion_delta": round(structure_reversion, 4),
-            "netback_delta": round(netback_delta, 4),
-            "inventory_delta": round(inventory_delta, 4),
-        }
-        return {
-            "method": "expert_rule_point_contribution",
-            "formula": "预测变化量=限幅((价差动量贡献+价差极值回归贡献+净回款套利贡献+区域库存贡献)*周期倍数)",
-            "current_spread": round(current_spread, 4),
-            "spread_change_1d": round(change_1d, 4),
-            "spread_change_3d": round(change_3d, 4),
-            "netback_spread": round(netback_spread, 4),
-            "inventory_ratio_to_median": round(float(inventory_ratio), 4) if inventory_ratio is not None else None,
-            "inventory_wow_change": round(float(inventory_wow), 4) if inventory_wow is not None else None,
-            "contributions": contributions,
-            "raw_d1_delta": round(raw_d1_delta, 4),
-            "horizon_multiplier": horizon_multiplier,
-            "horizon_cap": horizon_cap,
-            "predicted_delta": round(predicted_delta, 4),
-            "calculation": (
-                f"({contributions['momentum_delta']} + {contributions['structure_reversion_delta']} + "
-                f"{contributions['netback_delta']} + {contributions['inventory_delta']}) * "
-                f"{horizon_multiplier}，限幅±{horizon_cap} = {round(predicted_delta, 4)}"
-            ),
-        }
-
-    def _regional_baseline_prediction(
-        self,
-        *,
-        current_spread: float,
-        rule_delta: dict[str, Any],
-        operating_bounds: dict[str, Any],
-        regional_inventory: dict[str, Any],
-        horizon_config: HorizonConfig,
-    ) -> dict[str, Any]:
-        raw_delta = float(rule_delta.get("predicted_delta") or 0.0)
-        lower_bound = float(operating_bounds.get("lower"))
-        upper_bound = float(operating_bounds.get("upper"))
-        raw_point = current_spread + raw_delta
-        point_value = self._clip(raw_point, lower_bound, upper_bound)
-        predicted_delta = point_value - current_spread
-        range_half_width = self._regional_baseline_range_half_width(
-            rule_delta=rule_delta,
-            regional_inventory=regional_inventory,
-            horizon_config=horizon_config,
-            predicted_delta=predicted_delta,
-        )
-        direction_label = self._direction_from_delta(
-            predicted_delta,
-            threshold=self._regional_direction_threshold(horizon_config),
-        )
-        return {
-            "model_name": "区域业务基准预测",
-            "prediction_type": "regional_baseline",
-            "direction_label": direction_label,
-            "predicted_delta": round(predicted_delta, 4),
-            "predicted_region_minus_shandong_spread": round(point_value, 2),
-            "predicted_region_minus_shandong_spread_range_lower": round(point_value - range_half_width, 2),
-            "predicted_region_minus_shandong_spread_range_upper": round(point_value + range_half_width, 2),
-            "range_half_width": round(range_half_width, 4),
-            "method": "regional_rule_baseline",
-            "basis": "只使用区域规则贡献，不使用状态表中位数；用于和区域智能体综合预测并列对比。",
-            "rule_delta": rule_delta,
-            "operating_bounds": operating_bounds,
-            "calculation": (
-                f"当前价差{round(current_spread, 4)} + 规则变化{round(raw_delta, 4)}，"
-                f"经经营边界[{lower_bound}, {upper_bound}]约束后得到变化{round(predicted_delta, 4)}"
-            ),
-        }
-
     def _regional_baseline_range_half_width(
         self,
         *,
@@ -1445,6 +1639,38 @@ class ShandongRegionalSpreadPredictor:
         )
         return min(65.0, base + conflict_addon + inventory_addon + weak_signal_addon)
 
+
+    def _build_regional_history_cache(
+        self,
+        *,
+        frame: pd.DataFrame,
+        config: RegionalSpreadConfig,
+        as_of_date: date,
+        freight_estimate: float,
+    ) -> dict[str, Any]:
+        rows: list[dict[str, Any]] = []
+        sorted_frame = frame[frame["date"] <= as_of_date].sort_values("date").reset_index(drop=True)
+        for _, source_row in sorted_frame.iterrows():
+            source_date = self._parse_date_text(source_row.get("date"))
+            if source_date is None or source_date > as_of_date:
+                continue
+            enriched = self._enrich_row(source_row, config)
+            spread = self._float_or_none(enriched.get("target_region_spread"))
+            if spread is None:
+                continue
+            rows.append(
+                {
+                    "date": source_date,
+                    "spread": spread,
+                    "change_3d": self._float_or_none(enriched.get("target_region_spread_change_3d")) or 0.0,
+                    "netback": spread - freight_estimate,
+                }
+            )
+        return {
+            "rows": rows,
+            "spreads": [item["spread"] for item in rows],
+        }
+
     def _regional_state_table_delta(
         self,
         *,
@@ -1454,31 +1680,53 @@ class ShandongRegionalSpreadPredictor:
         as_of_date: date,
         freight_estimate: float,
         horizon_config: HorizonConfig,
+        regional_cache: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        cache_rows = list((regional_cache or {}).get("rows") or [])
         history_rows: list[dict[str, Any]] = []
-        sorted_frame = frame[frame["date"] <= as_of_date].sort_values("date").reset_index(drop=True)
-        for idx in range(len(sorted_frame) - horizon_config.steps):
-            source_row = sorted_frame.iloc[idx]
-            target_row = sorted_frame.iloc[idx + horizon_config.steps]
-            source_date = self._parse_date_text(source_row.get("date"))
-            target_date = self._parse_date_text(target_row.get("date"))
-            if source_date is None or target_date is None or target_date > as_of_date:
-                continue
-            enriched_source = self._enrich_row(source_row, config)
-            enriched_target = self._enrich_row(target_row, config)
-            source_spread = self._float_or_none(enriched_source.get("target_region_spread"))
-            target_spread = self._float_or_none(enriched_target.get("target_region_spread"))
-            if source_spread is None or target_spread is None:
-                continue
-            history_rows.append(
-                {
-                    "date": source_date,
-                    "spread": source_spread,
-                    "change_3d": self._float_or_none(enriched_source.get("target_region_spread_change_3d")) or 0.0,
-                    "netback": source_spread - freight_estimate,
-                    "future_delta": target_spread - source_spread,
-                }
-            )
+        if cache_rows:
+            for idx in range(len(cache_rows) - horizon_config.steps):
+                source_item = cache_rows[idx]
+                target_item = cache_rows[idx + horizon_config.steps]
+                if target_item["date"] > as_of_date:
+                    continue
+                source_spread = source_item.get("spread")
+                target_spread = target_item.get("spread")
+                if source_spread is None or target_spread is None:
+                    continue
+                history_rows.append(
+                    {
+                        "date": source_item["date"],
+                        "spread": source_spread,
+                        "change_3d": source_item.get("change_3d") or 0.0,
+                        "netback": source_item.get("netback", source_spread - freight_estimate),
+                        "future_delta": target_spread - source_spread,
+                    }
+                )
+        else:
+            sorted_frame = frame[frame["date"] <= as_of_date].sort_values("date").reset_index(drop=True)
+            for idx in range(len(sorted_frame) - horizon_config.steps):
+                source_row = sorted_frame.iloc[idx]
+                target_row = sorted_frame.iloc[idx + horizon_config.steps]
+                source_date = self._parse_date_text(source_row.get("date"))
+                target_date = self._parse_date_text(target_row.get("date"))
+                if source_date is None or target_date is None or target_date > as_of_date:
+                    continue
+                enriched_source = self._enrich_row(source_row, config)
+                enriched_target = self._enrich_row(target_row, config)
+                source_spread = self._float_or_none(enriched_source.get("target_region_spread"))
+                target_spread = self._float_or_none(enriched_target.get("target_region_spread"))
+                if source_spread is None or target_spread is None:
+                    continue
+                history_rows.append(
+                    {
+                        "date": source_date,
+                        "spread": source_spread,
+                        "change_3d": self._float_or_none(enriched_source.get("target_region_spread_change_3d")) or 0.0,
+                        "netback": source_spread - freight_estimate,
+                        "future_delta": target_spread - source_spread,
+                    }
+                )
         if len(history_rows) < REGIONAL_STATE_MIN_SAMPLE:
             return {
                 "status": "fallback",
@@ -1588,13 +1836,18 @@ class ShandongRegionalSpreadPredictor:
         config: RegionalSpreadConfig,
         as_of_date: date,
         freight_estimate: float,
+        regional_cache: dict[str, Any] | None = None,
     ) -> dict[str, float]:
-        spreads: list[float] = []
-        for _, source_row in frame[frame["date"] <= as_of_date].iterrows():
-            enriched = self._enrich_row(source_row, config)
-            spread = self._float_or_none(enriched.get("target_region_spread"))
-            if spread is not None:
-                spreads.append(spread)
+        cached_spreads = (regional_cache or {}).get("spreads")
+        if cached_spreads is not None:
+            spreads = list(cached_spreads)
+        else:
+            spreads: list[float] = []
+            for _, source_row in frame[frame["date"] <= as_of_date].iterrows():
+                enriched = self._enrich_row(source_row, config)
+                spread = self._float_or_none(enriched.get("target_region_spread"))
+                if spread is not None:
+                    spreads.append(spread)
         if len(spreads) < 20:
             lower = -0.35 * freight_estimate - REGIONAL_RISK_BUFFER
             upper = freight_estimate + REGIONAL_REQUIRED_MARGIN + REGIONAL_RISK_BUFFER
@@ -1733,8 +1986,11 @@ class ShandongRegionalSpreadPredictor:
         wow_change = target_value - prior_value if prior_value is not None else None
         stale_days = (as_of_date - latest_date).days
         subject = "贸易商" if selected_project_id == 12975 else "部分社会油库"
+        score_ready = stale_days == 1 and wow_change is not None and abs(float(wow_change)) >= 1e-9
         result = {
             "available": stale_days <= 21,
+            "score_ready": bool(score_ready),
+            "score_note": None if score_ready else "沿用上一期周度库存或本期无变化，本次不计分",
             "reason": None if stale_days <= 21 else f"区域库存最新日期{latest_date.isoformat()}，距预测日超过21天",
             "project_quota_id": selected_project_id,
             "subject": subject,
@@ -1902,3 +2158,4 @@ class ShandongRegionalSpreadPredictor:
     def _build_input_hash(self, payload: dict[str, Any]) -> str:
         serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+

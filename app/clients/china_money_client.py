@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import pandas as pd
@@ -9,11 +9,29 @@ import requests
 
 class ChinaMoneyCnyMidClient:
     BASE_URL = "https://www.chinamoney.com.cn/ags/ms/cm-u-bk-ccpr/CcprHisNew"
+    MAX_RANGE_DAYS = 180
 
     def __init__(self, *, timeout_seconds: float = 10.0) -> None:
         self.timeout_seconds = timeout_seconds
 
     def get_usd_cny_mid_series(self, *, start_date: date, end_date: date) -> pd.DataFrame:
+        rows = []
+        chunk_start = start_date
+        while chunk_start <= end_date:
+            chunk_end = min(chunk_start + timedelta(days=self.MAX_RANGE_DAYS), end_date)
+            rows.extend(
+                self._fetch_usd_cny_mid_rows(
+                    start_date=chunk_start,
+                    end_date=chunk_end,
+                )
+            )
+            chunk_start = chunk_end + timedelta(days=1)
+        if not rows:
+            return pd.DataFrame(columns=["date", "cny_mid_rate"])
+        frame = pd.DataFrame(rows).dropna(subset=["date", "cny_mid_rate"])
+        return frame.sort_values("date").drop_duplicates(subset=["date"], keep="last").reset_index(drop=True)
+
+    def _fetch_usd_cny_mid_rows(self, *, start_date: date, end_date: date) -> list[dict[str, Any]]:
         rows = []
         page_num = 1
         page_size = 30
@@ -42,10 +60,7 @@ class ChinaMoneyCnyMidClient:
             if page_num >= page_total:
                 break
             page_num += 1
-        if not rows:
-            return pd.DataFrame(columns=["date", "cny_mid_rate"])
-        frame = pd.DataFrame(rows).dropna(subset=["date", "cny_mid_rate"])
-        return frame.sort_values("date").drop_duplicates(subset=["date"], keep="last").reset_index(drop=True)
+        return rows
 
     def _fetch_page(self, *, start_date: date, end_date: date, page_num: int, page_size: int) -> dict[str, Any]:
         response = requests.get(

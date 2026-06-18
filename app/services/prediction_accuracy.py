@@ -97,6 +97,13 @@ class PredictionAccuracyService:
             if evaluated_items
             else None
         )
+        release_gate = self._build_release_gate(
+            sample_size=len(evaluated_items),
+            mae=mae,
+            direction_accuracy=direction_accuracy,
+            range_hit_rate=range_hit_rate,
+            within_50_rate=within_50_rate,
+        )
 
         return {
             "generated_at": datetime.now(),
@@ -107,6 +114,7 @@ class PredictionAccuracyService:
                 "direction_accuracy": direction_accuracy,
                 "range_hit_rate": range_hit_rate,
                 "within_50_rate": within_50_rate,
+                **release_gate,
             },
             "items": items,
             "metadata": {
@@ -115,7 +123,85 @@ class PredictionAccuracyService:
                 "actual_price_field": "sd_gas92_market",
                 "actual_scope": "山东92#国VI库提现汇市场价",
                 "evaluation_rule": "真实价格按山东92#国VI库提现汇市场价日期列对齐；目标日期无价格时仅展示为待验证。",
+                "release_gate_policy": "发布闸门：样本数>=20、MAE<=80元/吨、方向命中率>=55%、区间命中率>=60%、±50元命中率>=45%。",
             },
+        }
+
+    def _build_release_gate(
+        self,
+        *,
+        sample_size: int,
+        mae: float | None,
+        direction_accuracy: float | None,
+        range_hit_rate: float | None,
+        within_50_rate: float | None,
+    ) -> dict[str, Any]:
+        checks = [
+            {
+                "code": "sample_size",
+                "label": "已验证样本",
+                "value": sample_size,
+                "threshold": 20,
+                "passed": sample_size >= 20,
+                "unit": "条",
+            },
+            {
+                "code": "mae",
+                "label": "平均绝对偏差",
+                "value": mae,
+                "threshold": 80,
+                "passed": mae is not None and mae <= 80,
+                "unit": "元/吨以内",
+            },
+            {
+                "code": "direction_accuracy",
+                "label": "方向命中率",
+                "value": direction_accuracy,
+                "threshold": 0.55,
+                "passed": direction_accuracy is not None and direction_accuracy >= 0.55,
+                "unit": "以上",
+            },
+            {
+                "code": "range_hit_rate",
+                "label": "区间命中率",
+                "value": range_hit_rate,
+                "threshold": 0.60,
+                "passed": range_hit_rate is not None and range_hit_rate >= 0.60,
+                "unit": "以上",
+            },
+            {
+                "code": "within_50_rate",
+                "label": "±50内占比",
+                "value": within_50_rate,
+                "threshold": 0.45,
+                "passed": within_50_rate is not None and within_50_rate >= 0.45,
+                "unit": "以上",
+            },
+        ]
+        failed = [item for item in checks if not item["passed"]]
+        if not failed:
+            return {
+                "release_gate_status": "passed",
+                "release_gate_label": "允许发布",
+                "release_gate_passed": True,
+                "release_gate_reason": "复盘指标达到发布闸门，可进入受控发布或扩大试用。",
+                "release_gate_checks": checks,
+            }
+        if sample_size < 20:
+            return {
+                "release_gate_status": "insufficient_data",
+                "release_gate_label": "样本不足",
+                "release_gate_passed": False,
+                "release_gate_reason": "已验证样本不足20条，先积累样本，不建议作为正式发布依据。",
+                "release_gate_checks": checks,
+            }
+        failed_labels = "、".join(str(item["label"]) for item in failed)
+        return {
+            "release_gate_status": "blocked",
+            "release_gate_label": "暂缓发布",
+            "release_gate_passed": False,
+            "release_gate_reason": f"{failed_labels}未达到发布闸门，需继续校准后再发布。",
+            "release_gate_checks": checks,
         }
 
     def _load_prediction_rows(self, *, cutoff: date, limit: int) -> list[AccuracyRow]:

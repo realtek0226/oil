@@ -64,7 +64,7 @@ def build_outright_advice(
         elif display_label == "震荡偏弱":
             action_text = "以销定采，优先消化高价库存；弱势客户小步快跑成交。"
             volume_text = "库存以降至安全线附近为目标，不扩大采购敞口"
-        elif display_label in {"事件扰动中", "等待人工确认"}:
+        elif display_label in {"事件扰动中", "等待人工确认", "极端事件复核中"}:
             action_text = "暂停放量动作，研究员确认事件传导后再恢复报价或采购指令。"
             volume_text = "人工确认前不新增方向性敞口"
         advice.append(

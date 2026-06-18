@@ -62,7 +62,7 @@ try {
         if ($env:GANGLIAN_EXCEL_PATH) {
             $ExcelPath = $env:GANGLIAN_EXCEL_PATH
         } else {
-            $ExcelPath = Join-Path $Root "????????.xlsx"
+            $ExcelPath = Join-Path $Root "模型预测基础数据.xlsx"
         }
     }
 

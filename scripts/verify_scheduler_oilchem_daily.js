@@ -50,7 +50,9 @@ async function run() {
   assertJob(oilchemSpot?.mode === "daily", "oilchem_spot_report_fetch is not daily", failures);
   assertJob(oilchemSpot?.schedule_value === "06:00", "oilchem_spot_report_fetch is not scheduled at 06:00", failures);
   assertJob(Boolean(oilchemDaily), "oilchem_daily_fetch job is missing", failures);
-  assertJob(oilchemDaily?.enabled === false, "oilchem_daily_fetch should remain disabled", failures);
+  assertJob(oilchemDaily?.enabled === true, "oilchem_daily_fetch is not enabled", failures);
+  assertJob(oilchemDaily?.mode === "daily", "oilchem_daily_fetch is not daily", failures);
+  assertJob(oilchemDaily?.schedule_value === "18:10", "oilchem_daily_fetch is not scheduled at 18:10", failures);
   assertJob(Boolean(policyEvent), "policy_event_refresh job is missing", failures);
   assertJob(policyEvent?.enabled === true, "policy_event_refresh is not enabled", failures);
   assertJob(policyEvent?.schedule_value === "300秒", "policy_event_refresh is not scheduled every 300 seconds", failures);

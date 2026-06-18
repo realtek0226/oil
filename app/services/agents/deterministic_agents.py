@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import numbers
 import math
 from pathlib import Path
 from typing import Any
@@ -125,15 +126,16 @@ class SupplyAgent(BaseDeterministicAgent):
     max_score = 62.0
 
     def analyze(self, row: pd.Series, extra: dict[str, Any]) -> AgentClaim:
+        is_diesel = str(extra.get("product_code") or "").upper() == "DIESEL_0"
         utilization_pct = _first_float(
             row,
             ["shandong_cdu_utilization_percentile_weekly", "shandong_cdu_utilization_percentile_monthly"],
         )
-        inventory_pct = None
+        inventory_pct = _safe_float(row.get("shandong_diesel_product_inventory_percentile_weekly")) if is_diesel else _safe_float(row.get("shandong_product_inventory_percentile_weekly"))
         utilization_change = _first_float(row, ["shandong_cdu_utilization_wow_pct", "crude_run_change_1w"])
         refining_profit = _safe_float(row.get("sd_refining_profit"))
         utilization_score = _percentile_inverse_score(utilization_pct, 40.0)
-        inventory_score = 0.0
+        inventory_score = _percentile_inverse_score(inventory_pct, 12.0)
         if utilization_change is None or abs(utilization_change) < 0.01:
             utilization_change_score = 0.0
         else:
@@ -153,9 +155,13 @@ class SupplyAgent(BaseDeterministicAgent):
             evidence,
             {
                 "utilization_percentile": utilization_pct,
-                "inventory_total_percentile": None,
+                "inventory_total_percentile": inventory_pct,
+                "utilization_score": utilization_score,
+                "inventory_score": inventory_score,
                 "utilization_change": utilization_change,
+                "utilization_change_score": utilization_change_score,
                 "refining_profit": refining_profit,
+                "profit_score": profit_score,
             },
             max_score=self.max_score,
         )
@@ -166,36 +172,23 @@ class DemandAgent(BaseDeterministicAgent):
 
     def analyze(self, row: pd.Series, extra: dict[str, Any]) -> AgentClaim:
         horizon = _horizon(extra)
-        ratio_column = {
-            "D1": "sales_production_ratio_d1",
-            "D3": "sales_production_ratio_d3_avg",
-            "W1": "sales_production_ratio_w1_avg",
-            "M1": "sales_production_ratio_monthly_avg",
-        }.get(horizon, "sales_production_ratio_d1")
+        is_diesel = str(extra.get("product_code") or "").upper() == "DIESEL_0"
+        product_label = "柴油" if is_diesel else "汽油"
+        ratio_column_map = self._ratio_columns(is_diesel)
+        ratio_column = ratio_column_map.get(horizon, ratio_column_map["D1"])
         ratio = _safe_float(row.get(ratio_column))
         if ratio is None and horizon == "D1":
-            ratio = _safe_float(row.get("sales_production_ratio_w1_avg"))
-        ratio_score = _bucket_score(
-            ratio,
-            [
-                (110, None, 60),
-                (100, 110, 36),
-                (95, 100, 22),
-                (90, 95, 10),
-                (85, 90, 0),
-                (70, 85, -34),
-                (None, 70, -60),
-            ],
-        )
-        ratio_change = _safe_float(row.get("sales_production_ratio_monthly_change"))
+            ratio = _safe_float(row.get(ratio_column_map.get("W1")))
+        ratio_score = _bucket_score(ratio, self._ratio_buckets(horizon, is_diesel))
+        ratio_change = _safe_float(row.get(self._ratio_change_column(is_diesel)))
         rhythm_score = 0.0 if ratio_change is None else _clip(ratio_change / 12.0 * 18.0, -18, 18)
         season_score = _season_score(extra.get("as_of_date"), horizon)
         holiday_score = _holiday_score(extra.get("as_of_date"), horizon)
         score = _clip(ratio_score + rhythm_score + season_score + holiday_score, -100, 100)
         evidence = [
-            f"{horizon}产销率口径 {ratio_column}={ratio:.1f}%" if ratio is not None else f"{horizon}产销率缺失",
-            f"月度产销率变化 {ratio_change:.1f}" if ratio_change is not None else "月度产销率变化缺失",
-            f"季节性修正 {season_score:.1f}，节假日修正 {holiday_score:.1f}",
+            f"{horizon}{product_label}产销率口径 {ratio_column}={ratio:.1f}%" if ratio is not None else f"{horizon}{product_label}产销率缺失",
+            f"{product_label}月度产销率变化 {ratio_change:.1f}" if ratio_change is not None else f"{product_label}月度产销率变化缺失",
+            f"{product_label}需求分桶已按品种区分；季节性修正 {season_score:.1f}，节假日修正 {holiday_score:.1f}",
         ]
         return _claim(
             self.name,
@@ -203,13 +196,42 @@ class DemandAgent(BaseDeterministicAgent):
             f"需求季节{_direction_text(score)}",
             evidence,
             {
+                "product_label": product_label,
                 "sales_production_ratio": ratio,
                 "ratio_column": ratio_column,
+                "ratio_score": ratio_score,
                 "monthly_ratio_change": ratio_change,
                 "season_score": season_score,
                 "holiday_score": holiday_score,
             },
         )
+
+    def _ratio_columns(self, is_diesel: bool) -> dict[str, str]:
+        if is_diesel:
+            return {
+                "D1": "diesel_sales_production_ratio_d1",
+                "D3": "diesel_sales_production_ratio_d3_avg",
+                "W1": "diesel_sales_production_ratio_w1_avg",
+                "M1": "diesel_sales_production_ratio_monthly_avg",
+            }
+        return {
+            "D1": "sales_production_ratio_d1",
+            "D3": "sales_production_ratio_d3_avg",
+            "W1": "sales_production_ratio_w1_avg",
+            "M1": "sales_production_ratio_monthly_avg",
+        }
+
+    def _ratio_change_column(self, is_diesel: bool) -> str:
+        return "diesel_sales_production_ratio_monthly_change" if is_diesel else "sales_production_ratio_monthly_change"
+
+    def _ratio_buckets(self, horizon: str, is_diesel: bool) -> list[tuple[float | None, float | None, float]]:
+        if horizon == "D1":
+            if is_diesel:
+                return [(110, None, 60), (100, 110, 36), (95, 100, 10), (90, 95, 0), (85, 90, -10), (70, 85, -34), (None, 70, -60)]
+            return [(110, None, 60), (100, 110, 36), (95, 100, 20), (90, 95, 10), (85, 90, 0), (70, 85, -34), (None, 70, -60)]
+        if is_diesel:
+            return [(110, None, 60), (100, 110, 30), (95, 100, 15), (90, 95, 0), (85, 90, -15), (70, 85, -30), (None, 70, -60)]
+        return [(110, None, 60), (100, 110, 30), (95, 100, 30), (90, 95, 15), (85, 90, 0), (70, 85, -30), (None, 70, -60)]
 
 
 class RefinedOilNewsAgent(BaseDeterministicAgent):
@@ -662,7 +684,7 @@ class BusinessScorecardAgent(BaseDeterministicAgent):
 
     def analyze(self, row: pd.Series, extra: dict[str, Any]) -> AgentClaim:
         horizon = _horizon(extra)
-        scorecard = self._gasoline_scorecard()
+        scorecard = self._scorecard_for_extra(extra)
         horizon_config = ((scorecard.get("horizons") or {}).get(horizon) or {})
         groups = horizon_config.get("factor_groups") or []
         total_score = 0.0
@@ -674,12 +696,22 @@ class BusinessScorecardAgent(BaseDeterministicAgent):
             for feature in [*(group.get("features") or []), *(group.get("adjustments") or [])]:
                 feature_name = str(feature.get("feature_name") or "")
                 value = self._feature_value(feature_name, row, extra)
-                score_value_feature = feature.get("score_value_feature")
-                score_value = self._feature_value(str(score_value_feature), row, extra) if score_value_feature else value
-                if self._unchanged_score_gate(feature_name, row):
+                explicit_score_value_feature = feature.get("score_value_feature")
+                score_value_feature = explicit_score_value_feature or self._default_score_value_feature(feature_name)
+                score_value = value
+                if score_value_feature:
+                    resolved_score_value = self._feature_value(str(score_value_feature), row, extra)
+                    if resolved_score_value is not None:
+                        score_value = resolved_score_value
+                    elif explicit_score_value_feature:
+                        score_value = resolved_score_value
+                    else:
+                        score_value_feature = None
+                if self._unchanged_score_gate(feature_name, row, extra):
                     feature_score, matched_label = 0.0, "unchanged_from_previous"
                 else:
-                    feature_score, matched_label = self._feature_score_detail(feature, score_value)
+                    scoring_feature = self._feature_with_default_rules(feature_name, feature) if score_value_feature else feature
+                    feature_score, matched_label = self._feature_score_detail(scoring_feature, score_value)
                 group_score += feature_score
                 feature_results.append(
                     {
@@ -736,13 +768,60 @@ class BusinessScorecardAgent(BaseDeterministicAgent):
             {"scorecard": payload},
         )
 
+    def _default_score_value_feature(self, feature_name: str) -> str | None:
+        return {
+            "shandong_cdu_utilization_weekly": "shandong_cdu_utilization_percentile_weekly",
+            "shandong_product_inventory_percentile_weekly": "shandong_product_inventory_change_weekly",
+            "refinery_inventory_monthly": "shandong_refinery_inventory_change_weekly",
+            "main_company_inventory_monthly": "shandong_main_company_inventory_change_weekly",
+        }.get(feature_name)
+
+    def _feature_with_default_rules(self, feature_name: str, feature: dict[str, Any]) -> dict[str, Any]:
+        rules = feature.get("rules") or []
+        default_rules = self._default_score_rules(feature_name, rules)
+        if default_rules is rules:
+            return feature
+        updated = dict(feature)
+        updated["rules"] = default_rules
+        return updated
+
+    def _default_score_rules(self, feature_name: str, rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if feature_name in {
+            "shandong_product_inventory_percentile_weekly",
+            "refinery_inventory_monthly",
+            "main_company_inventory_monthly",
+        }:
+            cap = self._max_abs_rule_score(rules)
+            return [
+                {"min": None, "max": -100.0, "score": cap, "label": "inventory_down_large"},
+                {"min": -100.0, "max": -20.0, "score": cap * 0.5, "label": "inventory_down"},
+                {"min": -20.0, "max": 20.0, "score": 0.0, "label": "inventory_flat"},
+                {"min": 20.0, "max": 100.0, "score": -cap * 0.5, "label": "inventory_up"},
+                {"min": 100.0, "max": None, "score": -cap, "label": "inventory_up_large"},
+            ]
+        return rules
+
+    def _max_abs_rule_score(self, rules: list[dict[str, Any]]) -> float:
+        values = []
+        for rule in rules:
+            try:
+                values.append(abs(float(rule.get("score") or 0.0)))
+            except Exception:
+                continue
+        return max(values) if values else 0.0
+
     def _load_config(self, scorecard_path: str) -> dict[str, Any]:
         path = Path(scorecard_path)
         if not path.exists():
             return {}
         return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
-    def _gasoline_scorecard(self) -> dict[str, Any]:
+    def _scorecard_for_extra(self, extra: dict[str, Any]) -> dict[str, Any]:
+        product_code = str(extra.get("product_code") or "").upper()
+        target_code = "sd_diesel0" if product_code == "DIESEL_0" else "sd_gas92"
+        for item in self.config.get("scorecards") or []:
+            if item.get("scorecard_code") == target_code:
+                return item
         for item in self.config.get("scorecards") or []:
             if item.get("scorecard_code") == "sd_gas92":
                 return item
@@ -754,66 +833,185 @@ class BusinessScorecardAgent(BaseDeterministicAgent):
             return _report_forecast_change(extra, horizon)
         if feature_name.startswith("gasoline_crack_percentile"):
             return _safe_float(row.get("gasoline_crack_percentile"))
+        if feature_name.startswith("diesel_crack_percentile"):
+            return _safe_float(row.get("diesel_crack_percentile"))
         if feature_name == "shandong_cdu_utilization_weekly":
-            return _safe_float(row.get("sd_crude_run_weekly"))
+            return _safe_float(row.get("shandong_cdu_utilization_weekly"))
+        if feature_name in {
+            "crude_run_change_1w",
+            "shandong_product_inventory_change_weekly",
+            "shandong_refinery_inventory_change_weekly",
+            "shandong_main_company_inventory_change_weekly",
+        }:
+            return _safe_float(row.get(feature_name))
         if feature_name == "shandong_cdu_utilization_percentile_weekly":
             return _safe_float(row.get("shandong_cdu_utilization_percentile_weekly"))
         if feature_name == "shandong_cdu_utilization_percentile_monthly":
             return _safe_float(row.get("shandong_cdu_utilization_percentile_monthly"))
         if feature_name == "trader_sentiment_label_d1" or feature_name == "trader_sentiment_label_d3":
-            labels = extra.get("refined_news_labels") or extra.get("trade_sentiment") or {}
-            return labels.get("deal_activity") or labels.get("label")
+            labels = extra.get("refined_news_labels") or {}
+            return labels.get("deal_activity")
         if feature_name == "market_sentiment_monthly":
             labels = extra.get("monthly_market_sentiment") or {}
             return labels.get("label")
         if feature_name == "monthly_seasonality_phase":
             return _month_phase(extra.get("as_of_date"), horizon)
         if feature_name == "restocking_rhythm_monthly":
-            change = _safe_float(row.get("sales_production_ratio_monthly_change"))
-            if change is None:
-                return None
-            return "faster" if change > 3 else "slower" if change < -3 else "stable_small_lots"
+            active_day_change = _safe_float(row.get("restocking_rhythm_monthly_change"))
+            if active_day_change is not None:
+                if active_day_change > 0:
+                    return "active_restocking"
+                if active_day_change < 0:
+                    return "reduced_restocking"
+                return "stable_small_lots"
+            return None
         if feature_name == "holiday_demand_delta_monthly":
             return _holiday_delta_label(extra.get("as_of_date"), horizon)
         if feature_name in {"price_window_expectation_weekly", "price_window_expectation_monthly"}:
-            return _first_float(
-                row,
-                [
-                    "price_adjustment_expected_yuan",
-                    "refined_oil_adjustment_expected_yuan",
-                    "oil_price_adjustment_forecast_yuan",
-                    "expected_price_adjustment_yuan_per_ton",
-                    "price_window_expected_adjustment",
-                ],
-            )
+            adjustment = _safe_float(row.get("price_adjustment_expected_yuan"))
+            if adjustment is None:
+                return None
+            return "up_adjustment_expected" if adjustment > 50 else "down_adjustment_expected" if adjustment < -50 else "neutral"
         if feature_name == "refinery_inventory_monthly":
+            product_code = str(extra.get("product_code") or "").upper()
+            if product_code == "DIESEL_0":
+                return _safe_float(row.get("shandong_diesel_refinery_inventory_percentile_monthly"))
             return _safe_float(row.get("shandong_refinery_inventory_percentile_monthly"))
         if feature_name == "main_company_inventory_monthly":
+            product_code = str(extra.get("product_code") or "").upper()
+            if product_code == "DIESEL_0":
+                return _safe_float(row.get("shandong_diesel_main_company_inventory_percentile_monthly"))
             return _safe_float(row.get("shandong_main_company_inventory_percentile_monthly"))
         if feature_name == "shandong_product_inventory_percentile_weekly":
+            product_code = str(extra.get("product_code") or "").upper()
+            if product_code == "DIESEL_0":
+                return _safe_float(row.get("shandong_diesel_product_inventory_percentile_weekly"))
+            missing_component_count = _safe_float(row.get("shandong_product_inventory_missing_component_count"))
+            if missing_component_count is not None and missing_component_count > 0:
+                return None
             return _safe_float(row.get("shandong_product_inventory_percentile_weekly"))
+        if feature_name.startswith("refinery_maintenance_plan_adjustment"):
+            return self._maintenance_plan_adjustment(extra, horizon=horizon)
         if feature_name == "next_month_maintenance_plan":
-            plan = extra.get("oilchem_maintenance_plan") or {}
-            text = " ".join(str(plan.get(key) or "") for key in ("title", "summary", "content", "text"))
-            if any(word in text for word in ("检修", "降负", "停工")):
-                return "maintenance_increase"
-            return "neutral" if text.strip() else None
+            return self._maintenance_plan_label(extra, horizon=horizon)
         if feature_name.startswith("shandong_refinery_load_news_adjustment"):
-            return None
+            return _refinery_load_news_adjustment(extra)
         return _safe_float(row.get(feature_name))
 
-    def _unchanged_score_gate(self, feature_name: str, row: pd.Series) -> bool:
+
+    def _maintenance_plan_adjustment(self, extra: dict[str, Any], *, horizon: str) -> float:
+        label = self._maintenance_plan_label(extra, horizon=horizon)
+        if label == "concentrated_maintenance_supply_tight":
+            return 5.0
+        if label == "restart_and_supply_surplus":
+            return -5.0
+        return 0.0
+
+    def _maintenance_plan_label(self, extra: dict[str, Any], *, horizon: str) -> str | None:
+        plan = extra.get("oilchem_maintenance_plan") or {}
+        if not isinstance(plan, dict) or not plan:
+            return None
+        horizon_code = str(horizon or "M1").upper()
+        if horizon_code == "M1":
+            label = plan.get("m1_effective_capacity_label")
+            if label in {"concentrated_maintenance_supply_tight", "restart_and_supply_surplus", "stable_load"}:
+                return str(label)
+            active_capacity = _safe_float(plan.get("m1_active_capacity"))
+            active_count = _safe_float(plan.get("m1_active_count"))
+            if active_capacity is None and active_count is None:
+                return None
+            return "concentrated_maintenance_supply_tight" if (active_capacity or 0.0) > 0 or (active_count or 0.0) > 0 else "stable_load"
+        horizon_key = {"D1": "d1", "D3": "d3", "W1": "w1"}.get(horizon_code, "m1")
+        start_capacity = _safe_float(plan.get(f"{horizon_key}_start_capacity"))
+        end_capacity = _safe_float(plan.get(f"{horizon_key}_end_capacity"))
+        active_capacity = _safe_float(plan.get(f"{horizon_key}_active_capacity"))
+        active_count = _safe_float(plan.get(f"{horizon_key}_active_count"))
+        if start_capacity is None and end_capacity is None:
+            start_capacity = _safe_float(plan.get("next_30d_start_capacity"))
+            end_capacity = _safe_float(plan.get("next_30d_end_capacity"))
+        if start_capacity is None and end_capacity is None and active_capacity is None and active_count is None:
+            return None
+        net_tightening = (start_capacity or 0.0) - (end_capacity or 0.0)
+        if net_tightening > 0 or (active_capacity or 0.0) > 0 or (active_count or 0.0) > 0:
+            return "concentrated_maintenance_supply_tight"
+        if net_tightening < 0:
+            return "restart_and_supply_surplus"
+        return "stable_load"
+
+    def _parse_observation_date(self, value: Any) -> date | None:
+        if value is None:
+            return None
+        try:
+            if pd.isna(value):
+                return None
+        except Exception:
+            pass
+        if isinstance(value, numbers.Real):
+            magnitude = abs(float(value))
+            unit = "ns"
+            if magnitude < 10_000_000_000:
+                unit = "s"
+            elif magnitude < 10_000_000_000_000:
+                unit = "ms"
+            elif magnitude < 10_000_000_000_000_000:
+                unit = "us"
+            try:
+                return pd.to_datetime(value, unit=unit).date()
+            except Exception:
+                return None
+        try:
+            return pd.Timestamp(value).date()
+        except Exception:
+            return None
+
+    def _cdu_utilization_not_new_for_score(self, row: pd.Series, extra: dict[str, Any]) -> bool:
+        as_of_date = self._parse_observation_date(extra.get("as_of_date"))
+        observation_date = self._parse_observation_date(row.get("shandong_cdu_utilization_observation_date"))
+        if as_of_date is None or observation_date is None:
+            return False
+        expected_date = (pd.Timestamp(as_of_date) - pd.Timedelta(days=1)).date()
+        if observation_date != expected_date:
+            return True
+        change = _safe_float(row.get("shandong_cdu_utilization_wow_pct"))
+        if change is not None:
+            return abs(change) < 1e-9
+        current_value = _safe_float(row.get("shandong_cdu_utilization_weekly"))
+        previous_value = _safe_float(row.get("shandong_cdu_utilization_previous_value"))
+        if current_value is None or previous_value is None:
+            return True
+        return abs(current_value - previous_value) < 1e-9
+
+    def _unchanged_score_gate(self, feature_name: str, row: pd.Series, extra: dict[str, Any]) -> bool:
         if feature_name in {
             "shandong_cdu_utilization_weekly",
             "shandong_cdu_utilization_percentile_weekly",
             "shandong_cdu_utilization_percentile_monthly",
         }:
-            wow_pct = _safe_float(row.get("shandong_cdu_utilization_wow_pct"))
-            if wow_pct is not None:
-                return abs(wow_pct) < 1e-9
-            change = _safe_float(row.get("crude_run_change_1w"))
-            if change is not None:
-                return abs(change) < 1e-9
+            if self._cdu_utilization_not_new_for_score(row, extra):
+                return True
+        if feature_name == "shandong_product_inventory_percentile_weekly":
+            product_code = str(extra.get("product_code") or "").upper()
+            change = _safe_float(row.get("shandong_diesel_product_inventory_change_weekly")) if product_code == "DIESEL_0" else _safe_float(row.get("shandong_product_inventory_change_weekly"))
+            return change is None or abs(change) < 1e-9
+        if feature_name == "refinery_inventory_monthly":
+            change = _first_float(
+                row,
+                [
+                    "shandong_refinery_inventory_change_weekly",
+                    "shandong_diesel_refinery_inventory_change_weekly",
+                    "shandong_diesel_inventory_change_weekly",
+                ],
+            )
+            return change is None or abs(change) < 1e-9
+        if feature_name == "main_company_inventory_monthly":
+            change = _first_float(
+                row,
+                [
+                    "shandong_main_company_inventory_change_weekly",
+                    "shandong_diesel_main_company_inventory_change_weekly",
+                ],
+            )
+            return change is None or abs(change) < 1e-9
         return False
 
     def _feature_score(self, feature: dict[str, Any], value: Any) -> float:
@@ -838,6 +1036,9 @@ class BusinessScorecardAgent(BaseDeterministicAgent):
         if method == "enum_score":
             label = str(value)
             return float((feature.get("rules") or {}).get(label, 0.0)), label
+        if method == "calendar_month_band":
+            label = str(value)
+            return float((feature.get("scores") or {}).get(label, 0.0)), label
         if method == "bounded_numeric":
             numeric = _safe_float(value) or 0.0
             return _clip(numeric, float(feature.get("min", -100)), float(feature.get("max", 100))), "bounded_numeric"
@@ -1028,22 +1229,21 @@ def _report_forecast_change(extra: dict[str, Any], horizon: str) -> float | None
     report_payload = extra.get("report_payload") or {}
     signals = report_payload.get("signals") or {}
     if horizon == "D1":
-        forecast = signals.get("daily_forecast") or {}
+        forecasts = [signals.get("daily_forecast") or {}]
     else:
-        forecast = (signals.get("horizon_forecasts") or {}).get(horizon) or {}
-    point = _safe_float(forecast.get("point_value"))
+        horizon_forecasts = signals.get("horizon_forecasts") or {}
+        fallback_horizons = {
+            "D3": ["D3", "W1"],
+            "W1": ["W1"],
+            "M1": ["M1", "W4"],
+        }.get(horizon, [horizon])
+        forecasts = [horizon_forecasts.get(item) or {} for item in fallback_horizons]
     report_settlement = _safe_float(signals.get("brent_settlement"))
-    if point is not None and report_settlement is not None:
-        return point - report_settlement
-    change_source = str(forecast.get("change_source") or "")
-    forecast_change = None
-    for key in ("change_usd", "settlement_change_usd", "change_vs_previous_settlement_usd"):
-        forecast_change = _safe_float(forecast.get(key))
-        if forecast_change is not None:
-            break
-    if forecast_change is not None and change_source != "daily_point_minus_realtime":
-        return forecast_change
-    return _safe_float(signals.get("brent_settlement_change_usd"))
+    for forecast in forecasts:
+        point = _safe_float(forecast.get("point_value"))
+        if point is not None and report_settlement is not None:
+            return point - report_settlement
+    return None
 
 
 def _brent_fallback_columns(horizon: str) -> list[str]:
@@ -1088,6 +1288,23 @@ def _holiday_score(as_of_date: Any, horizon: str) -> float:
 def _holiday_delta_label(as_of_date: Any, horizon: str) -> str:
     month = _target_month(as_of_date, horizon)
     return "increase" if month in {1, 2, 4, 5, 6, 9, 10} else "unchanged"
+
+
+def _refinery_load_news_adjustment(extra: dict[str, Any]) -> float:
+    items = extra.get("refined_news_items") or []
+    maintenance_words = ("停工", "检修", "降负", "降负荷", "限产", "供应收缩")
+    restart_words = ("复工", "复产", "提负", "开工提升", "供应增加", "供应恢复")
+    score = 0.0
+    for item in items[:20]:
+        text = " ".join(
+            str(item.get(key) or "")
+            for key in ("headline", "title", "summary", "content", "text")
+        )
+        if any(word in text for word in maintenance_words):
+            score += 1.5
+        if any(word in text for word in restart_words):
+            score -= 1.5
+    return _clip(score, -5.0, 5.0)
 
 
 def _target_month(as_of_date: Any, horizon: str) -> int:

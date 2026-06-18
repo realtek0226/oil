@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Windows.Forms
 
 if (-not $ExcelPath) {
-    $ExcelPath = Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..")) "????????.xlsx"
+    $ExcelPath = Join-Path (Resolve-Path (Join-Path $PSScriptRoot "..")) "模型预测基础数据.xlsx"
 }
 $ExcelFullPath = (Resolve-Path -LiteralPath $ExcelPath).Path
 $ArtifactDir = Join-Path (Split-Path -Parent $ExcelFullPath) "artifacts"

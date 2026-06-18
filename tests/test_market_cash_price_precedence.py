@@ -1,5 +1,7 @@
 from datetime import date, datetime
 
+import pandas as pd
+
 from app.services.market_dataset import MarketDatasetService
 
 
@@ -61,3 +63,36 @@ def test_latest_snapshot_prefers_cash_price_over_eta_market_price() -> None:
     assert latest_prices["sd_gas92_market"] == 8046.0
     assert "cash_overlay" in mode
     assert "sd_gas92_market@2026-06-11:ganglian_excel_import" in reason
+
+
+def test_oilchem_production_sales_ratio_falls_back_by_product_independently() -> None:
+    svc = object.__new__(MarketDatasetService)
+    svc._load_archived_oilchem_records = lambda **_: [
+        {
+            "observation_date": date(2026, 6, 7),
+            "gasoline_ratio": 108.0,
+            "diesel_ratio": None,
+            "source": "manual_latest_gasoline_only",
+            "url": "https://example.com/latest",
+            "publish_time": datetime(2026, 6, 7, 9, 0),
+        },
+        {
+            "observation_date": date(2026, 6, 3),
+            "gasoline_ratio": 49.0,
+            "diesel_ratio": 56.0,
+            "source": "crawler_with_diesel",
+            "url": "https://example.com/diesel",
+            "publish_time": datetime(2026, 6, 3, 9, 0),
+        },
+    ]
+
+    base = pd.DataFrame({"date": [pd.Timestamp("2026-06-12")]})
+
+    result = svc._attach_oilchem_production_sales_ratio(base=base, end_date=date(2026, 6, 12))
+    latest = result.iloc[-1]
+
+    assert latest["sales_production_ratio_d1"] == 108.0
+    assert latest["diesel_sales_production_ratio_d1"] == 56.0
+    assert latest["sales_production_ratio_stale_days"] == 5
+    assert latest["diesel_sales_production_ratio_stale_days"] == 9
+    assert latest["diesel_sales_production_ratio_source"] == "crawler_with_diesel"

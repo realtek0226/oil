@@ -21,12 +21,22 @@
     "auth_token": "",
     "secret_key_b64": ""
   },
+  "brent_report": {
+    "api_url": "",
+    "timeout_seconds": 30
+  },
   "oilchem_openapi": {
     "enabled": false,
     "base_url": "",
     "username": "",
     "password": "",
     "timeout_seconds": 10
+  },
+  "sci99": {
+    "username": "",
+    "password": "",
+    "cookie": "",
+    "timeout_seconds": 20
   },
   "research": {
     "default_entity_code": "SD_GAS92",
@@ -44,16 +54,19 @@
     "timezone": "Asia/Shanghai",
     "snapshot_interval_seconds": 300,
     "policy_event_interval_seconds": 900,
-    "morning_briefing_time": "08:05",
-    "brent_report_fetch_time": "08:00",
+    "morning_briefing_enabled": false,
+    "morning_briefing_time": "08:30",
+    "brent_report_fetch_time": "08:15",
     "morning_briefing_use_llm": true,
     "oilchem_price_fetch_time": "19:00",
     "oilchem_production_sales_fetch_time": "20:00",
-    "oilchem_independent_maintenance_fetch_time": "23:00",
-    "oilchem_main_maintenance_fetch_time": "01:00",
+    "oilchem_independent_maintenance_fetch_time": "03:00",
+    "oilchem_main_maintenance_fetch_time": "03:30",
     "oilchem_spot_report_fetch_time": "02:00",
-    "oilchem_daily_fetch_time": "",
-    "oilchem_openapi_inventory_fetch_time": "22:00"
+    "oilchem_daily_fetch_time": "18:10",
+    "oilchem_openapi_inventory_fetch_time": "22:00",
+    "sci99_price_adjustment_fetch_time": "21:00",
+    "refined_news_fetch_time": "07:40"
   },
   "collectors": {
     "web_scraping_enabled": false,

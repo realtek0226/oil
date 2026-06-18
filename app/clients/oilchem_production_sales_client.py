@@ -210,7 +210,7 @@ class OilchemProductionSalesClient:
         r"\[炼油利润\][:：]山东地炼综合装置炼油利润周数据统计（(?P<yyyymmdd>\d{8})）"
     )
     maintenance_title_pattern = re.compile(
-        r"\[装置动态\][:：]山东地炼装置检修计划表（(?P<yyyymmdd>\d{8})）"
+        "\\[\u88c5\u7f6e\u52a8\u6001\\][:\uFF1A]?(?P<scope>\u5c71\u4e1c\u5730\u70bc\u88c5\u7f6e|\u5730\u65b9\u70bc\u5382|\u4e3b\u8425\u70bc\u5382\u88c5\u7f6e)\u68c0\u4fee\u8ba1\u5212\u8868(?:[\uFF08(](?P<yyyymmdd>\\d{8})[\uFF09)])?"
     )
     inventory_title_pattern = re.compile(
         r"\[库存\][:：]山东独立炼厂成品油库存数据统计（(?P<yyyymmdd>\d{8})）"
@@ -431,8 +431,12 @@ class OilchemProductionSalesClient:
         links.sort(key=lambda item: item["observation_date"], reverse=True)
         return links[:limit]
 
-    def fetch_maintenance_plan_links(self, limit: int = 3, refinery_scope: str = "independent") -> list[dict[str, Any]]:
-        keyword = "主营炼厂装置检修计划" if refinery_scope == "main" else "山东地炼装置检修计划"
+    def fetch_maintenance_plan_links(self, limit: int = 3, refinery_scope: str = "local") -> list[dict[str, Any]]:
+        keyword_by_scope = {
+            "main": "主营炼厂装置检修计划",
+            "local": "地方炼厂检修计划",
+        }
+        keyword = keyword_by_scope.get(refinery_scope, "地方炼厂检修计划")
         response = oilchem_get(
             SEARCH_URL,
             params={
@@ -452,16 +456,16 @@ class OilchemProductionSalesClient:
         seen: set[str] = set()
         for item in items:
             title = self._clean_text(str(item.get("title") or ""))
-            if refinery_scope == "main":
-                if "主营炼厂装置检修计划表" not in title:
-                    continue
-                publish_time = self._timestamp_from_millis(item.get("publishTime"))
-                observation_date = publish_time.date() if publish_time else date.today()
-            else:
-                match = self.maintenance_title_pattern.search(title)
-                if not match:
-                    continue
+            if refinery_scope == "main" and "主营炼厂装置检修计划表" not in title:
+                continue
+            if refinery_scope != "main" and "地方炼厂检修计划表" not in title:
+                continue
+            match = self.maintenance_title_pattern.search(title)
+            publish_time = self._timestamp_from_millis(item.get("publishTime"))
+            if match and match.group("yyyymmdd"):
                 observation_date = datetime.strptime(match.group("yyyymmdd"), "%Y%m%d").date()
+            else:
+                observation_date = publish_time.date() if publish_time else date.today()
             raw_url = str(item.get("linkUrl") or item.get("url") or item.get("articleUrl") or "")
             url = urljoin("https://www.oilchem.net/", raw_url)
             if url in seen:
@@ -683,7 +687,7 @@ class OilchemProductionSalesClient:
             source=(
                 "oilchem_main_refinery_maintenance_plan"
                 if refinery_scope == "main"
-                else "oilchem_refinery_maintenance_plan"
+                else "oilchem_local_refinery_maintenance_plan"
             ),
         )
 

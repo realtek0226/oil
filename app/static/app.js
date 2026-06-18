@@ -1,4 +1,4 @@
-const DEFAULT_HORIZONS = ["D1", "D3", "W1", "M1"];
+const DEFAULT_HORIZONS = ["D1", "W1", "M1"];
 const THEME_STORAGE_KEY = "refined-oil-workbench-theme";
 const CHAT_HISTORY_STORAGE_KEY = "refined-oil-chat-history-v1";
 const CHAT_HISTORY_LIMIT = 20;
@@ -10,7 +10,6 @@ const LEGACY_THEME_MAP = {
 };
 const HORIZON_LABELS = {
   D1: "明日",
-  D3: "三日",
   W1: "一周",
   M1: "一月",
 };
@@ -19,6 +18,8 @@ const PRICE_LABELS = [
   ["brent_active_settlement", "布伦特"],
   ["sd_gas92_market", "山东 92#"],
   ["cn_gas92_market", "全国 92#"],
+  ["sd_diesel0_market", "山东 0#柴油"],
+  ["cn_diesel0_market", "全国 0#柴油"],
   ["east_china_gas92_market", "华东 92#"],
   ["north_china_gas92_market", "华北 92#"],
   ["south_china_gas92_market", "华南 92#"],
@@ -26,10 +27,77 @@ const PRICE_LABELS = [
   ["northwest_gas92_market", "西北 92#"],
   ["southwest_gas92_market", "西南 92#"],
   ["northeast_gas92_market", "东北 92#"],
+  ["east_china_diesel0_market", "华东 0#柴油"],
+  ["north_china_diesel0_market", "华北 0#柴油"],
+  ["south_china_diesel0_market", "华南 0#柴油"],
+  ["central_china_diesel0_market", "华中 0#柴油"],
+  ["northwest_diesel0_market", "西北 0#柴油"],
+  ["southwest_diesel0_market", "西南 0#柴油"],
+  ["northeast_diesel0_market", "东北 0#柴油"],
 ];
 
 const PRICE_HISTORY_DEFAULT_SERIES = ["sd_gas92_market", "cn_gas92_market", "east_china_gas92_market"];
-const PRICE_HISTORY_COLORS = ["#f97316", "#0f766e", "#2563eb", "#9333ea", "#dc2626", "#64748b"];
+const PRICE_HISTORY_COLORS = ["#f97316", "#0f766e", "#2563eb", "#9333ea", "#dc2626", "#64748b", "#0891b2", "#16a34a", "#a16207"];
+const BRIEFING_FEATURE_ENABLED = false;
+
+const PRODUCT_CONFIGS = {
+  GASOLINE_92: {
+    code: "GASOLINE_92",
+    label: "92#汽油",
+    fullLabel: "山东92#汽油",
+    switchLabel: "汽油",
+    shortLabel: "92#",
+    shandongLabel: "当前山东92#",
+    pointLabel: "山东92#预测中枢",
+    spreadModuleTitle: "92#汽油区域价差",
+    spreadModuleSubtitle: "区域价 - 山东价",
+    shandongPriceKey: "sd_gas92_market",
+    nationalPriceKey: "cn_gas92_market",
+    eastPriceKey: "east_china_gas92_market",
+    priceSnapshotKeys: ["brent_active_settlement", "sd_gas92_market", "cn_gas92_market", "east_china_gas92_market"],
+    historySeries: [
+      "sd_gas92_market",
+      "cn_gas92_market",
+      "east_china_gas92_market",
+      "north_china_gas92_market",
+      "south_china_gas92_market",
+      "central_china_gas92_market",
+      "northwest_gas92_market",
+      "southwest_gas92_market",
+      "northeast_gas92_market",
+    ],
+    predictionListKey: "outright_predictions",
+  },
+  DIESEL_0: {
+    code: "DIESEL_0",
+    label: "0#柴油",
+    fullLabel: "山东0#柴油",
+    switchLabel: "柴油",
+    shortLabel: "0#",
+    shandongLabel: "当前山东0#柴油",
+    pointLabel: "山东0#柴油预测中枢",
+    spreadModuleTitle: "0#柴油区域价差",
+    spreadModuleSubtitle: "柴油区域价 - 山东柴油价",
+    shandongPriceKey: "sd_diesel0_market",
+    nationalPriceKey: "cn_diesel0_market",
+    eastPriceKey: "east_china_diesel0_market",
+    crackKey: "sd_diesel_crack",
+    priceSnapshotKeys: ["brent_active_settlement", "sd_diesel0_market", "cn_diesel0_market", "east_china_diesel0_market"],
+    historySeries: [
+      "sd_diesel0_market",
+      "cn_diesel0_market",
+      "east_china_diesel0_market",
+      "north_china_diesel0_market",
+      "south_china_diesel0_market",
+      "central_china_diesel0_market",
+      "northwest_diesel0_market",
+      "southwest_diesel0_market",
+      "northeast_diesel0_market",
+    ],
+    predictionListKey: "diesel0_predictions",
+  },
+};
+const PRODUCT_ORDER = ["GASOLINE_92", "DIESEL_0"];
 
 const FACTOR_LABELS = {
   business_scorecard_agent: "业务基准模型",
@@ -51,6 +119,7 @@ const SCORECARD_GROUP_LABELS = {
   sentiment: "情绪侧",
   inventory: "库存侧",
   policy: "政策侧",
+  policy_sentiment: "政策与情绪侧",
   seasonality: "季节性",
 };
 
@@ -60,7 +129,14 @@ const SCORECARD_FEATURE_LABELS = {
   brent_change_usd_w1: "Brent 周度涨跌",
   brent_change_usd_mom: "Brent 月度涨跌",
   gasoline_crack_percentile: "汽油裂解价差分位",
+  diesel_crack_percentile: "柴油裂解价差分位",
+  diesel_sales_production_ratio_d1: "柴油产销率",
+  diesel_sales_production_ratio_d3_avg: "柴油三日产销率均值",
+  diesel_sales_production_ratio_w1_avg: "柴油周度产销率均值",
   gasoline_crack_trend_d1: "汽油裂解趋势",
+  main_company_inventory_monthly: "主营销售公司库存",
+  price_window_expectation_monthly: "月度调价预期",
+  price_window_expectation_weekly: "周度调价预期",
   gasoline_crack_trend_monthly: "汽油裂解月度趋势",
   shandong_cdu_utilization_weekly: "山东地炼常减压开工率",
   shandong_cdu_utilization_percentile_weekly: "山东地炼开工率分位",
@@ -77,7 +153,7 @@ const SCORECARD_FEATURE_LABELS = {
   inventory_trend_weekly: "库存趋势",
   price_window_expectation_w1: "发改委调价窗口预期",
   monthly_seasonality_phase: "月度季节性",
-  next_month_maintenance_plan: "下月检修计划",
+  next_month_maintenance_plan: "地方/主营炼厂检修计划",
   monthly_utilization_band: "月度开工区间",
   restocking_rhythm_monthly: "补库节奏",
   holiday_demand_delta_monthly: "节假日需求变化",
@@ -89,23 +165,40 @@ const SCORECARD_FEATURE_LABELS = {
 const SCORECARD_BUCKET_LABELS = {
   low_utilization: "低开工率",
   medium_low_utilization: "中低开工率",
+  low_crack_percentile: "低裂解分位",
+  medium_low_crack_percentile: "中低裂解分位",
+  middle_crack_percentile: "中位裂解",
+  medium_high_crack_percentile: "中高裂解分位",
+  high_crack_percentile: "高裂解分位",
   middle_utilization: "中等开工率",
   medium_high_utilization: "中高开工率",
   high_utilization: "高开工率",
   large_up: "大幅上涨",
+  medium_large_up: "中大幅上涨",
+  medium_up: "中幅上涨",
   small_up: "小幅上涨",
   flat: "持平",
   small_down: "小幅下跌",
   large_down: "大幅下跌",
+  medium_down: "中幅下跌",
+  medium_large_down: "中大幅下跌",
   expanded: "裂解扩大",
   contracted: "裂解收窄",
   bullish_active: "偏多活跃",
   neutral_flat: "中性",
-  unchanged_from_previous: "与前一条一致，按0分",
+  unchanged_from_previous: "开工率未到新发布日或本期未变化，按0分",
   bearish_selling: "偏空出货",
   peak: "旺季",
   off: "淡季",
-  neutral: "平季",
+  neutral: "平季/中性",
+  secondary_peak: "次旺季",
+  secondary_off: "次淡季",
+  more_holidays: "节假日增加",
+  fewer_holidays: "节假日减少",
+  up_adjustment_expected: "上调预期",
+  down_adjustment_expected: "下调预期",
+  restart_and_supply_surplus: "复工增量过剩",
+  concentrated_maintenance_supply_tight: "集中检修供给收缩",
   missing: "数据缺失",
   unmatched: "未命中",
   bounded_numeric: "数值修正",
@@ -119,6 +212,26 @@ const SCORECARD_BUCKET_LABELS = {
   medium_low_percentile: "中低分位",
   middle_percentile: "中位",
   medium_high_percentile: "中高分位",
+  utilization_down_large: "开工率处于历史低位",
+  utilization_down_medium: "开工率处于历史偏低",
+  utilization_down_small: "开工率处于历史偏低",
+  utilization_up_large: "开工率处于历史高位",
+  utilization_up_medium: "开工率处于历史偏高",
+  utilization_up_small: "开工率处于历史偏高",
+  stable_utilization: "开工率基本稳定",
+  inventory_up_large: "库存明显上升",
+  inventory_up_medium: "库存上升",
+  inventory_up_small: "库存小幅上升",
+  inventory_down_large: "库存明显下降",
+  inventory_down_medium: "库存下降",
+  inventory_down_small: "库存小幅下降",
+  inventory_flat: "库存变化不大",
+  active_restocking: "备货节奏增强",
+  weak_restocking: "备货节奏减弱",
+  bearish: "偏空",
+  bullish: "偏多",
+  matched: "命中打分规则",
+  None: "未命中明确分档",
   high_percentile: "高分位",
 };
 
@@ -231,10 +344,12 @@ const dom = {
   eventToggle: document.getElementById("toggle-event"),
   narrativeToggle: document.getElementById("toggle-narrative"),
   refreshButton: document.getElementById("refresh-button"),
+  productSwitches: Array.from(document.querySelectorAll("[data-product-switch]")),
   horizonSwitch: document.getElementById("horizon-switch"),
   outrightPanel: document.getElementById("outright-panel"),
   spreadHeatmap: document.getElementById("spread-heatmap"),
   spreadGrid: document.getElementById("spread-grid"),
+  spreadHorizonSwitch: document.getElementById("spread-horizon-switch"),
   freightSettingsPanel: document.getElementById("freight-settings-panel"),
   regionalHorizonLabel: document.getElementById("regional-horizon-label"),
   spreadDetailDialog: document.getElementById("spread-detail-dialog"),
@@ -331,7 +446,9 @@ const dom = {
 const state = {
   currentView: "home",
   currentAgentSubView: "overview",
+  selectedProduct: "GASOLINE_92",
   selectedHorizon: "D1",
+  selectedRegionalHorizon: "D1",
   availableHorizons: [...DEFAULT_HORIZONS],
   dashboard: null,
   baselineDashboard: null,
@@ -396,6 +513,38 @@ function escapeHtml(value) {
 
 function escapeAttr(value) {
   return escapeHtml(value).replaceAll("\n", "&#10;");
+}
+
+
+function filterActiveHorizons(items) {
+  if (!Array.isArray(items)) return [];
+  return items.filter((item) => DEFAULT_HORIZONS.includes(item?.horizon));
+}
+
+function filterActiveHorizonMap(map) {
+  if (!map || typeof map !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(map)
+      .filter(([horizon]) => DEFAULT_HORIZONS.includes(horizon))
+      .map(([horizon, items]) => [horizon, Array.isArray(items) ? items : []])
+  );
+}
+
+
+function sanitizeDashboardHorizons(dashboard) {
+  if (!dashboard) return dashboard;
+  dashboard.outright_predictions = filterActiveHorizons(dashboard.outright_predictions || []);
+  if (dashboard.outright_prediction && !DEFAULT_HORIZONS.includes(dashboard.outright_prediction.horizon)) {
+    dashboard.outright_prediction = dashboard.outright_predictions[0] || null;
+  }
+  dashboard.regional_spread_predictions = filterActiveHorizons(dashboard.regional_spread_predictions || []);
+  dashboard.regional_spread_predictions_by_horizon = filterActiveHorizonMap(dashboard.regional_spread_predictions_by_horizon || {});
+  if (dashboard.metadata) {
+    dashboard.metadata.available_horizons = DEFAULT_HORIZONS.filter((horizon) => dashboard.metadata.available_horizons?.includes(horizon) ?? true);
+    dashboard.metadata.diesel0_predictions = filterActiveHorizons(dashboard.metadata.diesel0_predictions || []);
+    dashboard.metadata.diesel0_regional_spread_predictions_by_horizon = filterActiveHorizonMap(dashboard.metadata.diesel0_regional_spread_predictions_by_horizon || {});
+  }
+  return dashboard;
 }
 
 function cloneData(value) {
@@ -583,8 +732,20 @@ function marketReasonLabel(reason) {
   if (reason === "wind_eta_unavailable") return "Wind/ETA 不可用，本地补位";
   if (reason === "eta_unavailable") return "本地补位";
   if (reason === "eta_snapshot_empty") return "快照补位";
+  if (reason === "stale") return "日报偏旧，需复核";
+  if (reason === "missing") return "日报缺失";
+  if (reason === "future") return "日报日期异常";
+  if (reason === "fresh") return "日报已更新";
+  if (reason === "brent_daily_report_missing") return "Brent日报缺失";
   if (String(reason).startsWith("missing:")) return "部分补位";
   const text = String(reason);
+  if (text.includes(";")) {
+    return text
+      .split(";")
+      .filter(Boolean)
+      .map((item) => marketReasonLabel(item))
+      .join("；");
+  }
   if (text.includes("local_market_overrides") || text.includes("local_factor_overlay")) {
     const marketMatch = text.match(/local_market_overrides=(\d+)/);
     const factorMatch = text.match(/local_factor_overlay=(\d+)/);
@@ -593,6 +754,7 @@ function marketReasonLabel(reason) {
     if (factorMatch) parts.push(`本地因子补充 ${factorMatch[1]} 条`);
     return parts.join("；") || "本地数据修正";
   }
+  if (/^[a-z0-9_:-]+$/i.test(text)) return "数据口径需复核";
   return text;
 }
 
@@ -621,6 +783,14 @@ function formatPercentValue(value) {
 
 function predictionStatusLabel(status) {
   return status === "evaluated" ? "已验证" : "待验证";
+}
+
+function productDisplayLabel(code, fallback = "") {
+  return {
+    GASOLINE_92: "山东92#汽油",
+    DIESEL_0: "山东0#柴油",
+    GASOLINE_92_SPREAD: "92#汽油区域价差",
+  }[code] || fallback || "成品油品种";
 }
 
 function hitLabel(value) {
@@ -799,7 +969,7 @@ function setChip(target, text, mode = "idle") {
 function requestBody(overrides = {}) {
   return {
     horizon: state.selectedHorizon,
-    horizons: state.availableHorizons,
+    horizons: DEFAULT_HORIZONS,
     scenario_text: dom.scenarioInput.value.trim() || null,
     use_llm_explainer: false,
     enable_refined_news: dom.newsToggle.checked,
@@ -807,6 +977,15 @@ function requestBody(overrides = {}) {
     persist_run: true,
     ...overrides,
   };
+}
+
+function syncPriceHistorySeriesForProduct() {
+  const defaults = currentProductConfig().historySeries;
+  const active = state.priceHistorySeries || [];
+  const belongsToProduct = defaults.some((key) => active.includes(key));
+  if (!belongsToProduct) {
+    state.priceHistorySeries = [...defaults];
+  }
 }
 
 function freightSettingMap() {
@@ -839,12 +1018,12 @@ function applyFreightSettingsToRegionalPredictions() {
     return { ...item, raw_context: nextRaw };
   };
   if (state.dashboard.regional_spread_predictions_by_horizon) {
-    state.dashboard.regional_spread_predictions_by_horizon = Object.fromEntries(
+    state.dashboard.regional_spread_predictions_by_horizon = filterActiveHorizonMap(Object.fromEntries(
       Object.entries(state.dashboard.regional_spread_predictions_by_horizon).map(([horizon, items]) => [
         horizon,
         (items || []).map(applyToItem),
       ])
-    );
+    ));
   }
   if (state.dashboard.regional_spread_predictions) {
     state.dashboard.regional_spread_predictions = state.dashboard.regional_spread_predictions.map(applyToItem);
@@ -853,28 +1032,179 @@ function applyFreightSettingsToRegionalPredictions() {
 
 function refreshFreightDependentViews() {
   applyFreightSettingsToRegionalPredictions();
+  renderSpreadHorizonSwitch();
   const regional = selectedRegionalPredictions();
-  renderSpreadHeatmap(regional);
-  renderSpreadCards(regional);
+  const productConfig = currentProductConfig();
+  if (dom.regionalHorizonLabel) {
+    dom.regionalHorizonLabel.textContent = `${state.selectedRegionalHorizon || state.selectedHorizon} / ${productConfig.shortLabel}价差`;
+  }
+  renderProductSpreadModules(regional);
   renderFreightSettings(regional);
+}
+
+function currentProductConfig() {
+  return PRODUCT_CONFIGS[state.selectedProduct] || PRODUCT_CONFIGS.GASOLINE_92;
+}
+
+function productPredictions(productCode = state.selectedProduct) {
+  if (!state.dashboard) return [];
+  if (productCode === "DIESEL_0") {
+    return filterActiveHorizons(state.dashboard.metadata?.diesel0_predictions || []);
+  }
+  return filterActiveHorizons(state.dashboard.outright_predictions || []);
+}
+
+function latestPrices() {
+  return {
+    ...(state.marketSnapshot?.latest_prices || {}),
+    ...(state.dashboard?.latest_prices || {}),
+  };
+}
+
+function resolveDieselCrackValue() {
+  const prices = latestPrices();
+  const explicit = Number(prices.sd_diesel_crack ?? selectedDiesel0Prediction()?.raw_context?.current_diesel_crack_spread);
+  if (Number.isFinite(explicit)) return explicit;
+  const diesel = Number(prices.sd_diesel0_market);
+  const brent = Number(prices.brent_active_settlement);
+  const cnyMid = Number(
+    prices.cny_mid_rate ??
+      prices.usd_cny_mid_rate ??
+      prices.usdcny_mid ??
+      selectedDiesel0Prediction()?.raw_context?.cny_mid ??
+      selectedOutrightPrediction()?.raw_context?.cny_mid
+  );
+  if (!Number.isFinite(diesel) || !Number.isFinite(brent) || !Number.isFinite(cnyMid)) return null;
+  return diesel / 1.13 - 1411.2 - brent * 6.77 * cnyMid;
+}
+
+function resolveGasolineCrackValue() {
+  const prices = latestPrices();
+  const prediction = selectedOutrightPrediction();
+  const explicit = Number(prices.sd_gas_crack ?? prices.gasoline_crack ?? prediction?.raw_context?.current_gasoline_crack_spread);
+  if (Number.isFinite(explicit)) return explicit;
+  const gasoline = Number(prices.sd_gas92_market ?? prediction?.raw_context?.current_price);
+  const brent = Number(prices.brent_active_settlement ?? prediction?.raw_context?.brent_settlement);
+  const cnyMid = Number(
+    prices.cny_mid_rate ??
+      prices.usd_cny_mid_rate ??
+      prices.usdcny_mid ??
+      prediction?.raw_context?.cny_mid
+  );
+  if (!Number.isFinite(gasoline) || !Number.isFinite(brent) || !Number.isFinite(cnyMid)) return null;
+  return gasoline / 1.13 - 2109.76 - brent * 6.77 * cnyMid;
+}
+
+function productFallbackPrediction(productCode = state.selectedProduct) {
+  if (productCode !== "DIESEL_0") return null;
+  const prices = latestPrices();
+  const monitor = state.dashboard?.metadata?.diesel0_monitor || {};
+  const currentPrice = prices.sd_diesel0_market ?? monitor.current_price;
+  const displayPrice = currentPrice ?? null;
+  return {
+    product_code: "DIESEL_0",
+    entity_code: "SD_DIESEL0",
+    horizon: state.selectedHorizon,
+    point_value: monitor.point_value ?? displayPrice,
+    range_lower: monitor.range_lower ?? displayPrice,
+    range_upper: monitor.range_upper ?? displayPrice,
+    direction_label: "flat",
+    confidence_label: "medium",
+    confidence_score: 0.45,
+    score_value: 0,
+    explanation: "当前为0#柴油数据观察视图；点击刷新研究结论后生成0#柴油同逻辑预测。",
+    factor_breakdown: [],
+    agent_claims: [],
+    raw_context: {
+      current_price: displayPrice,
+      predicted_delta: 0,
+      probabilities: { up: 0.33, flat: 0.34, down: 0.33 },
+      business_direction: {
+        label: "待生成柴油预测",
+        tone: "flat",
+        operating_grade: "观察",
+        usage: "数据观察",
+      },
+      business_scorecard_prediction: null,
+      business_scorecard: null,
+      event_gate: { label: "待复核", action: "生成新预测后启用" },
+      current_diesel_crack_spread: prices.sd_diesel_crack,
+    },
+  };
+}
+
+function selectedDiesel0Prediction() {
+  const predictions = productPredictions("DIESEL_0");
+  return (
+    predictions.find((item) => item.horizon === state.selectedHorizon) ||
+    state.dashboard?.metadata?.diesel0_prediction ||
+    predictions[0] ||
+    productFallbackPrediction("DIESEL_0")
+  );
 }
 
 function selectedOutrightPrediction() {
   if (!state.dashboard) return null;
+  if (state.selectedProduct === "DIESEL_0") return selectedDiesel0Prediction();
   return (
-    (state.dashboard.outright_predictions || []).find((item) => item.horizon === state.selectedHorizon) ||
+    (filterActiveHorizons(state.dashboard.outright_predictions || [])).find((item) => item.horizon === state.selectedHorizon) ||
     state.dashboard.outright_prediction ||
     null
   );
 }
 
-function selectedRegionalPredictions() {
+function selectedRegionalPredictions(horizon = state.selectedRegionalHorizon || state.selectedHorizon) {
   if (!state.dashboard) return [];
-  return (
-    state.dashboard.regional_spread_predictions_by_horizon?.[state.selectedHorizon] ||
-    state.dashboard.regional_spread_predictions ||
-    []
-  );
+  const byHorizon = state.selectedProduct === "DIESEL_0"
+    ? state.dashboard.metadata?.diesel0_regional_spread_predictions_by_horizon
+    : state.dashboard.regional_spread_predictions_by_horizon;
+  return byHorizon?.[horizon] || [];
+}
+
+function selectedRegionalSpreadError() {
+  if (!state.dashboard) return "";
+  return state.selectedProduct === "DIESEL_0"
+    ? state.dashboard.metadata?.diesel0_regional_spread_error
+    : state.dashboard.metadata?.regional_spread_error;
+}
+function regionalDetailKey(item) {
+  const context = item?.raw_context || {};
+  return context.counter_region_code || item?.region_code || "";
+}
+
+function regionalDetailButtonAttrs(item, fallbackIndex = -1) {
+  const regionCode = regionalDetailKey(item);
+  const horizon = item?.horizon || state.selectedRegionalHorizon || state.selectedHorizon || "D1";
+  return `data-spread-detail-index="${fallbackIndex}" data-spread-region="${escapeHtml(regionCode)}" data-spread-horizon="${escapeHtml(horizon)}"`;
+}
+
+function findRegionalPredictionForDetail({ index, regionCode, horizon } = {}) {
+  const selectedHorizon = horizon || state.selectedRegionalHorizon || state.selectedHorizon;
+  const predictions = selectedRegionalPredictions(selectedHorizon);
+  if (regionCode) {
+    const matched = predictions.find((item) => regionalDetailKey(item) === regionCode || item.region_code === regionCode);
+    if (matched) return matched;
+  }
+  const parsedIndex = Number(index);
+  if (Number.isFinite(parsedIndex) && parsedIndex >= 0 && predictions[parsedIndex]) return predictions[parsedIndex];
+  return null;
+}
+
+
+function renderSpreadHorizonSwitch() {
+  if (!dom.spreadHorizonSwitch) return;
+  const horizons = ["D1", "W1", "M1"];
+  if (!horizons.includes(state.selectedRegionalHorizon)) state.selectedRegionalHorizon = "D1";
+  dom.spreadHorizonSwitch.innerHTML = horizons.map((horizon) => {
+    const rows = state.selectedProduct === "DIESEL_0"
+      ? state.dashboard?.metadata?.diesel0_regional_spread_predictions_by_horizon?.[horizon]
+      : state.dashboard?.regional_spread_predictions_by_horizon?.[horizon];
+    const hasRows = Array.isArray(rows) && rows.length > 0;
+    const active = horizon === state.selectedRegionalHorizon ? " is-active" : "";
+    const unavailable = hasRows ? "" : " is-unavailable";
+    const label = horizon === "D1" ? "D+1" : horizon === "W1" ? "W+1" : "M+1";
+    return `<button class="spread-horizon-button${active}${unavailable}" type="button" data-spread-horizon="${escapeHtml(horizon)}" title="${hasRows ? "" : "\u6682\u65e0\u8be5\u5468\u671f\u533a\u57df\u4ef7\u5dee\u9884\u6d4b"}">${escapeHtml(label)}</button>`;
+  }).join("");
 }
 
 function regionalPredictedPrice(item) {
@@ -907,8 +1237,17 @@ function regionalActualSpread(item) {
 
 function regionalPredictionVariants(item) {
   const raw = item?.raw_context || {};
-  const variants = Array.isArray(raw.regional_prediction_variants) ? raw.regional_prediction_variants : [];
+  const variants = Array.isArray(raw.regional_prediction_variants) ? raw.regional_prediction_variants.filter(Boolean) : [];
   if (variants.length) return variants;
+  const rebuilt = [];
+  if (raw.regional_composite_prediction && typeof raw.regional_composite_prediction === "object") {
+    rebuilt.push(raw.regional_composite_prediction);
+  }
+  if (raw.regional_baseline_prediction && typeof raw.regional_baseline_prediction === "object") {
+    rebuilt.push(raw.regional_baseline_prediction);
+  }
+  if (rebuilt.length) return rebuilt;
+  const scorecard = raw.business_scorecard || raw.business_scorecard_prediction?.scorecard || null;
   return [
     {
       model_name: "区域智能体综合预测",
@@ -919,11 +1258,12 @@ function regionalPredictionVariants(item) {
       predicted_delta: raw.predicted_delta,
       predicted_region_minus_shandong_spread_range_lower: raw.predicted_region_minus_shandong_spread_range_lower,
       predicted_region_minus_shandong_spread_range_upper: raw.predicted_region_minus_shandong_spread_range_upper,
-      basis: raw.prediction_method_note,
+      basis: raw.prediction_method_note || raw.regional_price_prediction_formula,
+      factor_breakdown: item?.factor_breakdown || raw.factor_breakdown || [],
+      scorecard,
     },
   ];
 }
-
 function regionalVariantLabel(variant) {
   if (variant?.prediction_type === "regional_baseline") return "基准";
   if (variant?.prediction_type === "regional_composite") return "综合";
@@ -944,15 +1284,34 @@ function regionalVariantSpread(variant) {
   return null;
 }
 
+function spreadToneComparedToCurrent(predictedSpread, currentSpread) {
+  if (predictedSpread == null || currentSpread == null) return "flat";
+  const delta = Number(predictedSpread) - Number(currentSpread);
+  if (delta > 0) return "up";
+  if (delta < 0) return "down";
+  return "flat";
+}
+
+function spreadNetback(spread, freight) {
+  if (spread == null || freight == null) return null;
+  return Number(spread) - Number(freight);
+}
+
+function regionNetbackPrice(regionPrice, freight) {
+  if (regionPrice == null || freight == null) return null;
+  return Number(regionPrice) - Number(freight);
+}
+
 function renderRegionalVariantRows(item, options = {}) {
   const { compact = false } = options;
   const rows = regionalPredictionVariants(item).slice(0, 2);
   return rows
     .map((variant) => {
       const direction = variant.direction_label || item?.direction_label || "flat";
+      const label = variant?.prediction_type === "regional_baseline" ? "业务逻辑" : "智能体";
       return `
         <div class="${compact ? "regional-variant-row is-compact" : "regional-variant-row"}">
-          <span>${escapeHtml(regionalVariantLabel(variant))}</span>
+          <span>${label}</span>
           <strong class="${toneClass(direction)}">${formatNumber(regionalVariantPrice(variant))}</strong>
           <em>${escapeHtml(shortDirectionLabel(direction, true))}</em>
           <small>区域-山东价差 ${formatNumber(regionalVariantSpread(variant))}</small>
@@ -961,7 +1320,7 @@ function renderRegionalVariantRows(item, options = {}) {
     .join("");
 }
 
-function renderMarketSnapshot() {
+function renderLegacyPriceSnapshotUnused() {
   const snapshot = state.marketSnapshot;
   if (!snapshot) {
     dom.priceSnapshot.innerHTML = emptyState("价格快照加载中");
@@ -995,8 +1354,45 @@ function renderMarketSnapshot() {
   }).join("");
 }
 
+function renderProductSwitch() {
+  if (!dom.productSwitches?.length) return;
+  const html = PRODUCT_ORDER.map((productCode) => {
+    const config = PRODUCT_CONFIGS[productCode];
+    const active = productCode === state.selectedProduct ? " is-active" : "";
+    const prediction = productCode === "DIESEL_0"
+      ? selectedDiesel0Prediction()
+      : (state.dashboard?.outright_predictions || []).find((item) => item.horizon === state.selectedHorizon) || state.dashboard?.outright_prediction;
+    const business = businessDirectionInfo(prediction);
+    const statusText = productCode === "DIESEL_0" && !productPredictions("DIESEL_0").length
+      ? "观察视图 / 刷新生成预测"
+      : business.label;
+    return `
+      <button class="product-button${active}" type="button" data-product="${escapeHtml(productCode)}" title="${escapeHtml(`${config.fullLabel} / ${statusText}`)}">
+        <span>${escapeHtml(config.switchLabel || config.label)}</span>
+      </button>`;
+  }).join("");
+
+  dom.productSwitches.forEach((switchNode) => {
+    switchNode.innerHTML = html;
+    switchNode.querySelectorAll("[data-product]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        state.selectedProduct = button.dataset.product || "GASOLINE_92";
+        const config = currentProductConfig();
+        state.priceHistorySeries = [...config.historySeries];
+        renderResearch();
+        renderMarketSnapshot();
+        renderPriceHistory();
+        if (dom.narrativeToggle.checked && state.selectedProduct === "GASOLINE_92") {
+          await ensureNarrativeForSelectedHorizon();
+        }
+        await loadPriceHistory();
+      });
+    });
+  });
+}
+
 function renderHorizonButtons() {
-  const predictions = state.dashboard?.outright_predictions || [];
+  const predictions = productPredictions();
   if (!predictions.length) {
     dom.horizonSwitch.innerHTML = "";
     return;
@@ -1016,8 +1412,9 @@ function renderHorizonButtons() {
   dom.horizonSwitch.querySelectorAll("[data-horizon]").forEach((button) => {
     button.addEventListener("click", async () => {
       state.selectedHorizon = button.dataset.horizon;
+      if (!state.selectedRegionalHorizon) state.selectedRegionalHorizon = state.selectedHorizon;
       renderResearch();
-      if (dom.narrativeToggle.checked) {
+      if (dom.narrativeToggle.checked && state.selectedProduct === "GASOLINE_92") {
         await ensureNarrativeForSelectedHorizon();
       }
     });
@@ -1048,6 +1445,17 @@ function scorecardFeatureLabel(featureName) {
   return FIELD_LABELS[featureName] || SCORECARD_FEATURE_LABELS[featureName] || featureName || "未命名项目";
 }
 
+function scorecardFeatureLabelForContext(feature, options = {}) {
+  const baseLabel = scorecardFeatureLabel(feature?.feature_name || feature?.display_name);
+  const regionName = String(options.regionName || "").trim();
+  if (!regionName) return baseLabel;
+  return String(baseLabel)
+    .replace(/山东地炼/g, `${regionName}地炼`)
+    .replace(/山东炼厂/g, `${regionName}炼厂`)
+    .replace(/山东独立炼厂/g, `${regionName}独立炼厂`)
+    .replace(/山东/g, regionName);
+}
+
 function fieldDisplayLabel(fieldName) {
   const key = String(fieldName || "").trim();
   if (!key) return "未命名字段";
@@ -1062,9 +1470,22 @@ function fieldDisplayLabel(fieldName) {
   return key.replace(/_/g, " ");
 }
 
+function humanizeScorecardLabel(label) {
+  const key = String(label || "").trim();
+  if (!key || key === "None") return "未命中明确分档";
+  if (SCORECARD_BUCKET_LABELS[key]) return SCORECARD_BUCKET_LABELS[key];
+  if (key.includes("utilization") && key.includes("down")) return "开工率处于历史偏低";
+  if (key.includes("utilization") && key.includes("up")) return "开工率处于历史偏高";
+  if (key.includes("inventory") && key.includes("up")) return "库存上升";
+  if (key.includes("inventory") && key.includes("down")) return "库存下降";
+  if (key.includes("crack") && key.includes("high")) return "裂解价差高分位";
+  if (key.includes("crack") && key.includes("low")) return "裂解价差低分位";
+  return key.replace(/_/g, " ");
+}
+
 function scorecardMatchedLabel(label) {
   if (label == null || label === "") return "-";
-  return SCORECARD_BUCKET_LABELS[label] || String(label);
+  return humanizeScorecardLabel(label);
 }
 
 function scorecardRuleHitText(feature, missing) {
@@ -1104,6 +1525,25 @@ function scorecardValueSourceText(feature) {
   return note ? `${source} / ${note}` : source;
 }
 
+
+function scorecardReferenceText(feature) {
+  if (!feature) return "";
+  const name = String(feature.feature_name || "");
+  const scoreValue = feature.score_value;
+  const valueText = scorecardValueText(feature.value);
+  const scoreValueText = scorecardValueText(scoreValue);
+  const explicit = [];
+  if (name.includes("sentiment") || name.includes("adjustment") || name.includes("expectation")) {
+    explicit.push(`引用值：${valueText}`);
+  }
+  if (scoreValue != null && scoreValue !== feature.value) {
+    explicit.push(`打分依据值：${scoreValueText}`);
+  }
+  const sourceText = scorecardValueSourceText(feature);
+  if (sourceText) explicit.push(sourceText);
+  return explicit.filter(Boolean).join("；");
+}
+
 function scorecardMethodText(method) {
   const labels = {
     bucket_score: "分档",
@@ -1137,13 +1577,13 @@ function scorecardUnresolvedReason(reason) {
   return text;
 }
 
-function renderBusinessScorecard(scorecard) {
-  const groups = scorecard?.group_scores || scorecard?.groups || [];
+function renderBusinessScorecard(scorecard, options = {}) {
+  const groups = (scorecard?.group_scores || scorecard?.groups || []).filter((group) => !["regional_data_mapping", "regional_agent_missing"].includes(String(group?.group_code || "")));
   if (!groups.length) {
     return '<div class="business-scorecard-empty muted-text">暂无业务打分明细</div>';
   }
 
-  const unresolved = scorecard.unresolved_items || [];
+  const unresolved = options.hideUnresolved ? [] : (scorecard.unresolved_items || []);
   const quality = scorecard.data_quality || {};
   const available = Number(quality.available_count ?? 0);
   const missing = Number(quality.missing_count ?? 0);
@@ -1191,20 +1631,22 @@ function renderBusinessScorecard(scorecard) {
                     const score = Number(feature.score || 0);
                     const featureTone = score >= 0 ? "up" : "down";
                     const missing = feature.status === "missing";
+                    const rawRule = feature.raw_rule || feature.rule_text || "";
                     return `
                       <div class="business-scorecard-row ${missing ? "is-missing" : ""}">
                         <div class="business-scorecard-name">
-                          <span>${escapeHtml(scorecardFeatureLabel(feature.feature_name || feature.display_name))}</span>
+                          <span>${escapeHtml(scorecardFeatureLabelForContext(feature, options))}</span>
                           <em>${escapeHtml(scorecardFeatureMethodText(feature))}${feature.is_adjustment ? " / 修正项" : ""}</em>
                         </div>
                         <div class="business-scorecard-value">
                           <span>取值</span>
                           <strong>${escapeHtml(scorecardValueText(feature.value))}</strong>
-                          <em>${escapeHtml(missing ? "缺失按0分" : scorecardValueSourceText(feature) || "已取数")}</em>
+                          <em>${escapeHtml(missing ? "缺失按0分" : scorecardReferenceText(feature) || scorecardValueSourceText(feature) || "已取数")}</em>
                         </div>
                         <div class="business-scorecard-match">
                           <span>规则</span>
                           <strong>${escapeHtml(scorecardRuleHitText(feature, missing))}</strong>
+                          ${feature.score_value_feature && feature.score_value != null && feature.score_value !== feature.value ? `<em>打分依据值：${escapeHtml(scorecardValueText(feature.score_value))}</em>` : ""}
                         </div>
                         <div class="business-scorecard-score">
                           <span>得分</span>
@@ -1213,7 +1655,7 @@ function renderBusinessScorecard(scorecard) {
                       </div>`;
                   })
                   .join("")}
-            <div class="muted-text">区域价 - 山东价</div>
+
               </div>
             </article>`;
         })
@@ -1239,6 +1681,8 @@ function renderBusinessScorecard(scorecard) {
 function renderBusinessScorecardPrediction(prediction) {
   if (!prediction) return "";
   const direction = prediction.direction_label || "flat";
+  const eventReview = prediction.event_review || {};
+  const showEventReview = eventReview.needs_manual_review || Math.abs(Number(eventReview.event_overlay_delta || 0)) > 0;
   return `
     <div class="business-scorecard-prediction">
       <div class="business-scorecard-prediction-head">
@@ -1263,6 +1707,12 @@ function renderBusinessScorecardPrediction(prediction) {
           <strong class="${toneClass(Number(prediction.score || 0) >= 0 ? "up" : "down")}">${formatNumber(prediction.score)}</strong>
         </div>
       </div>
+      ${showEventReview ? `
+        <div class="business-event-review-note">
+          <strong>事件复核提示</strong>
+          <span>${escapeHtml(eventReview.reason || "事件只作为复核提示，不直接修改业务模型点位。")}</span>
+          <em>复核参考变化：${formatNumber(eventReview.suggested_delta_if_event_review_accepted)} 元/吨</em>
+        </div>` : ""}
       <p>${escapeHtml(prediction.basis || "业务打分模型独立预测，不参与智能体综合分加权。")}</p>
     </div>`;
 }
@@ -1303,6 +1753,7 @@ function renderRegionalPriceForecastStrip(predictions) {
         </div>
         <div class="regional-variant-list">${renderRegionalVariantRows(item, { compact: true })}</div>
         <small>当前真实价差 ${formatNumber(current)}</small>
+        <button class="spread-detail-button" type="button" ${regionalDetailButtonAttrs(item, selectedRegionalPredictions().indexOf(item))}>详情</button>
       </article>`;
   }).join("");
   return `
@@ -1321,18 +1772,27 @@ function renderDriverList(items) {
 }
 
 function renderAdviceList(items) {
-  if (!items?.length) return '<div class="advice-item muted-text">暂无驱动信息</div>';
+  if (!items?.length) return '<div class="advice-item muted-text">暂无动作卡</div>';
   return items.map((item) => {
+    const priorityLabel = { high: "高优先", medium: "中优先", low: "低优先" }[item.priority] || item.priority || "中优先";
+    const reviewText = item.review_required ? `需${item.review_role || "人工"}复核` : "可按边界执行";
     return `
-      <div class="advice-item">
-        <div class="advice-title">${escapeHtml(normalizeNarrativeText(item.title || "建议"))}</div>
+      <div class="advice-item action-card">
+        <div class="advice-title">
+          <span>${escapeHtml(item.card_type || "经营动作卡")}</span>
+          <strong>${escapeHtml(normalizeNarrativeText(item.title || "建议"))}</strong>
+          <em>${escapeHtml(priorityLabel)}</em>
+        </div>
         <div class="advice-action">${escapeHtml(normalizeNarrativeText(item.action || ""))}</div>
         ${
-          item.trigger_condition || item.volume_suggestion || item.risk_stop
+          item.trigger_condition || item.volume_suggestion || item.risk_stop || item.execution_boundary
             ? `<div class="advice-meta-grid">
                 ${item.trigger_condition ? `<span>触发：${escapeHtml(normalizeNarrativeText(item.trigger_condition))}</span>` : ""}
                 ${item.volume_suggestion ? `<span>量化：${escapeHtml(normalizeNarrativeText(item.volume_suggestion))}</span>` : ""}
+                ${item.execution_boundary ? `<span>边界：${escapeHtml(normalizeNarrativeText(item.execution_boundary))}</span>` : ""}
                 ${item.risk_stop ? `<span>止损：${escapeHtml(normalizeNarrativeText(item.risk_stop))}</span>` : ""}
+                <span>复核：${escapeHtml(reviewText)}</span>
+                ${item.owner_role ? `<span>责任：${escapeHtml(item.owner_role)}</span>` : ""}
               </div>`
             : ""
         }
@@ -1341,23 +1801,144 @@ function renderAdviceList(items) {
   }).join("");
 }
 
+function renderDataGate(gate) {
+  if (!gate) return "";
+  const statusClass = gate.status === "ready" ? "is-hit" : gate.status === "blocked" ? "is-miss" : "is-pending";
+  const checks = gate.checks || [];
+  const statusText = { ready: "通过", degraded: "降级", blocked: "阻断" }[gate.status] || gate.label || "待复核";
+  return `
+    <article class="info-card insight-card data-gate-card ${statusClass}">
+      <h3>数据可用性闸门</h3>
+      <div class="gate-head">
+        <strong>${escapeHtml(gate.label || statusText)}</strong>
+        <span>${escapeHtml(gate.reason || "")}</span>
+      </div>
+      <div class="gate-check-grid">
+        ${checks
+          .map((item) => {
+            const label = { pass: "通过", warn: "复核", fail: "失败" }[item.status] || item.status;
+            return `
+              <div class="gate-check ${item.status || "warn"}">
+                <strong>${escapeHtml(item.label)}</strong>
+                <span>${escapeHtml(label)}</span>
+                <small>${escapeHtml(item.detail || "")}</small>
+              </div>`;
+          })
+          .join("")}
+      </div>
+    </article>`;
+}
+
+function renderProductScope(items) {
+  if (!items?.length) return "";
+  return `
+    <article class="info-card insight-card product-scope-card">
+      <h3>品种覆盖</h3>
+      <div class="gate-check-grid">
+        ${items
+          .map(
+            (item) => `
+              <div class="gate-check ${String(item.status || "").includes("正式") ? "pass" : "warn"}">
+                <strong>${escapeHtml(item.label || productDisplayLabel(item.product_code))}</strong>
+                <span>${escapeHtml(item.status || "待接入")}</span>
+                <small>${escapeHtml(item.detail || item.display_code || item.label || "")}</small>
+              </div>`
+          )
+          .join("")}
+      </div>
+    </article>`;
+}
+
+function renderDiesel0Monitor(item) {
+  if (!item) return "";
+  const quality = item.data_quality || {};
+  const missing = quality.missing || [];
+  const coverage = quality.coverage || {};
+  const coverageItems = Object.values(coverage);
+  return `
+    <article class="info-card insight-card diesel-monitor-card">
+      <h3>0#柴油预测</h3>
+      <div class="diesel-monitor-head">
+        <div>
+          <span>${escapeHtml(item.status || "监测中")}</span>
+          <strong>${escapeHtml(item.direction_label || "震荡观望")}</strong>
+        </div>
+        <div>
+          <span>参考点位</span>
+          <strong>${formatNumber(item.point_value)}</strong>
+        </div>
+      </div>
+      <div class="gate-check-grid">
+        <div class="gate-check warn">
+          <strong>当前山东0#</strong>
+          <span>${formatNumber(item.current_price)} 元/吨</span>
+          <small>传导变化 ${formatNumberTrim(item.projected_delta, 1)} 元/吨</small>
+        </div>
+        <div class="gate-check warn">
+          <strong>参考区间</strong>
+          <span>${formatNumber(item.range_lower)} ~ ${formatNumber(item.range_upper)}</span>
+          <small>${escapeHtml(item.release_gate_label || "待回测校准")}</small>
+        </div>
+        <div class="gate-check warn">
+          <strong>柴油裂解</strong>
+          <span>${item.diesel_crack_spread == null ? "-" : formatNumber(item.diesel_crack_spread)}</span>
+          <small>柴油-92#价差 ${item.diesel_minus_gas92_spread == null ? "-" : `${formatNumberTrim(item.diesel_minus_gas92_spread, 1)} 元/吨`}</small>
+        </div>
+      </div>
+      <p class="body-text">${escapeHtml(item.basis || "")}</p>
+      <p class="body-text">${escapeHtml(item.action_boundary || "")}</p>
+      ${
+        missing.length || coverageItems.length
+          ? `<div class="diesel-quality">
+              ${
+                missing.length
+                  ? `<span>缺失：${escapeHtml(missing.map((entry) => entry.label || entry.key).join("、"))}</span>`
+                  : `<span>${escapeHtml(quality.message || "柴油预测核心数据齐备。")}</span>`
+              }
+              ${coverageItems
+                .map((entry) => `<span>${escapeHtml(entry.label)}覆盖 ${formatNumberTrim((entry.rate || 0) * 100, 1)}%</span>`)
+                .join("")}
+            </div>`
+          : ""
+      }
+    </article>`;
+}
+
+function renderDieselDataQualityCard(quality) {
+  if (!quality) return "";
+  const freshness = quality.freshness?.diesel_sales_production_ratio;
+  const missing = quality.missing || [];
+  return `
+    <article class="info-card insight-card data-gate-card ${quality.status === "ready" ? "is-hit" : "is-pending"}">
+      <h3>0#柴油数据可用性</h3>
+      <div class="gate-head">
+        <strong>${escapeHtml(quality.status === "ready" ? "核心数据已接入" : "核心数据待补齐")}</strong>
+        <span>${escapeHtml(quality.message || "")}</span>
+      </div>
+      <div class="gate-check-grid">
+        <div class="gate-check ${freshness?.status === "stale" ? "warn" : "pass"}">
+          <strong>柴油产销率</strong>
+          <span>${freshness?.value == null ? "-" : `${formatNumberTrim(freshness.value, 2)}%`}</span>
+          <small>${
+            freshness?.observation_date
+              ? `观测 ${formatDate(freshness.observation_date)} / 滞后 ${formatNumberTrim(freshness.stale_days, 0)} 天`
+              : freshness?.value != null
+                ? "来自缓存打分特征"
+                : "等待隆众归档"
+          }</small>
+        </div>
+        <div class="gate-check ${missing.length ? "warn" : "pass"}">
+          <strong>缺失项</strong>
+          <span>${missing.length ? `${missing.length} 项` : "无核心缺失"}</span>
+          <small>${escapeHtml(missing.slice(0, 4).map((item) => item.label || item.key).join("、") || "柴油预测数据视图可用")}</small>
+        </div>
+      </div>
+    </article>`;
+}
+
 function renderPredictionNarrativeSplit(outright) {
   const businessPrediction = outright?.raw_context?.business_scorecard_prediction || {};
   return `
-    <article class="info-card insight-card narrative-split-card">
-      <h3>核心驱动</h3>
-      <div class="narrative-split-grid">
-        <section>
-          <span>智能体综合预测</span>
-          <div class="driver-list">${renderDriverList(outright?.driver_summary)}</div>
-        </section>
-        <section>
-          <span>业务打分模型预测</span>
-          <div class="driver-list">${renderDriverList(businessPrediction.driver_summary)}</div>
-        </section>
-      </div>
-    </article>
-
     <article class="info-card insight-card narrative-split-card">
       <h3>经营建议</h3>
       <div class="narrative-split-grid">
@@ -1414,6 +1995,46 @@ function renderLlmAgentReviews(reviews, limit = 3) {
     </div>`;
 }
 
+function dieselRegionRows() {
+  const prices = latestPrices();
+  const shandong = Number(prices.sd_diesel0_market);
+  const rows = [
+    ["华东", "east_china_diesel0_market", "EAST_CHINA"],
+    ["华北", "north_china_diesel0_market", "NORTH_CHINA"],
+    ["华南", "south_china_diesel0_market", "SOUTH_CHINA"],
+    ["华中", "central_china_diesel0_market", "CENTRAL_CHINA"],
+    ["西北", "northwest_diesel0_market", "NORTHWEST"],
+    ["西南", "southwest_diesel0_market", "SOUTHWEST"],
+    ["东北", "northeast_diesel0_market", "NORTHEAST"],
+  ]
+    .map(([region, key, regionCode]) => {
+      const value = prices[key];
+      const spread = Number.isFinite(shandong) && value != null ? Number(value) - shandong : null;
+      return { region, regionCode, key, value, spread };
+    })
+    .filter((item) => item.value != null);
+  return rows;
+}
+
+function renderDieselRegionalPriceStrip() {
+  const rows = dieselRegionRows().slice(0, 6);
+  if (!rows.length) return "";
+  return `
+    <div class="regional-forecast-strip diesel-region-strip">
+      ${rows
+        .map((item) => {
+          const tone = Number(item.spread || 0) >= 0 ? "up" : "down";
+          return `
+            <article class="regional-forecast-card">
+              <span>${escapeHtml(item.region)}0#柴油</span>
+              <strong>${formatNumber(item.value)}</strong>
+              <small class="${toneClass(tone)}">较山东 ${formatNumberTrim(item.spread, 1)} 元/吨</small>
+            </article>`;
+        })
+        .join("")}
+    </div>`;
+}
+
 function renderPredictionEvidenceChain(prediction) {
   const raw = prediction?.raw_context || {};
   const refinedSources = raw.refined_news_sources || [];
@@ -1431,6 +2052,9 @@ function renderPredictionEvidenceChain(prediction) {
   const pointAdjustmentTotal = Object.values(raw.point_adjustments || {}).reduce((sum, value) => sum + Number(value || 0), 0);
   const predictedDelta = Number(raw.predicted_delta || 0);
   const mappedDelta = predictedDelta - pointAdjustmentTotal;
+  const selectedQuantileLabel = pointMapping.selected_quantile != null
+    ? `P${Math.round(Number(pointMapping.selected_quantile) * 100)}`
+    : "分位";
   const pointValue = Number(prediction?.point_value ?? raw.current_price + predictedDelta);
   const currentPrice = Number(raw.current_price || 0);
   const rangeHalfWidth = Number(raw.risk_range_half_width || raw.core_range_half_width || 0);
@@ -1464,7 +2088,7 @@ function renderPredictionEvidenceChain(prediction) {
   const rows = [
     {
       label: "价格锚点",
-      value: `山东92# ${formatNumber(raw.current_price)} 元/吨`,
+      value: `${currentProductConfig().fullLabel} ${formatNumber(raw.current_price)} 元/吨`,
       meta: `布伦特 ${formatNumber(state.marketSnapshot?.latest_prices?.brent_active_settlement)} / ${marketReasonLabel(raw.market_data_reason)}`,
     },
     {
@@ -1489,7 +2113,7 @@ function renderPredictionEvidenceChain(prediction) {
           ? `${formatNumber(currentPrice)} ${predictedDelta >= 0 ? "+" : "-"} ${formatNumber(Math.abs(predictedDelta))} = ${formatNumber(pointValue)}`
           : pointMapping.method || "未启用分桶映射",
       meta: pointMappingIsDistribution
-        ? `状态桶 ${pointMapping.bucket || "-"}；分桶中位数 ${formatNumber(mappedDelta)}；强信号修正 ${formatNumber(pointAdjustmentTotal)}；样本 ${formatNumberTrim(pointMapping.sample_size || 0, 0)} 条`
+        ? `状态桶 ${pointMapping.bucket || "-"}；分桶取点 ${selectedQuantileLabel} ${formatNumber(mappedDelta)}；强信号修正 ${formatNumber(pointAdjustmentTotal)}；样本 ${formatNumberTrim(pointMapping.sample_size || 0, 0)} 条`
         : `综合分 ${formatNumber(raw.score_value)}；修正 ${formatNumber(pointAdjustmentTotal)}`,
     },
     {
@@ -1851,17 +2475,20 @@ function buildDecisionSummary(prediction) {
 function renderResearch() {
   if (!state.dashboard) {
     dom.outrightPanel.innerHTML = emptyState("研究结论加载中");
-    dom.spreadHeatmap.innerHTML = emptyState("区域价差加载中");
+    if (dom.spreadHeatmap) dom.spreadHeatmap.innerHTML = emptyState("区域价差加载中");
     dom.spreadGrid.innerHTML = emptyState("区域价差加载中");
     return;
   }
 
+  renderProductSwitch();
   renderHorizonButtons();
 
+  const productConfig = currentProductConfig();
   const outright = selectedOutrightPrediction();
   const regional = selectedRegionalPredictions();
   if (!outright) {
-    dom.outrightPanel.innerHTML = emptyState("暂无研究结论");
+    dom.outrightPanel.innerHTML = emptyState(`暂无${productConfig.fullLabel}研究结论`);
+    renderProductSpreadModules(regional);
     return;
   }
 
@@ -1869,38 +2496,45 @@ function renderResearch() {
   const business = businessDirectionInfo(outright);
   const eventGate = outright.raw_context?.event_gate || {};
   const decisionItems = buildDecisionSummary(outright);
-  const modeText = outright.degrade_flag
-    ? `结论基于降级数据：${marketReasonLabel(outright.degrade_reason)}`
-    : `结论日期 ${formatDate(state.dashboard.as_of_date)}`;
+  const modeText = "";
 
-  setChip(dom.researchMeta, modeText);
+  if (dom.researchMeta) { dom.researchMeta.hidden = true; dom.researchMeta.textContent = ""; }
   setChip(dom.narrativeStatus, dom.narrativeToggle.checked ? "模型解释开启" : "规则解释");
-  dom.regionalHorizonLabel.textContent = `${state.selectedHorizon} / 当前价差`;
+  if (dom.regionalHorizonLabel) dom.regionalHorizonLabel.textContent = `${state.selectedRegionalHorizon || state.selectedHorizon} / ${productConfig.shortLabel}价差`;
 
   dom.outrightPanel.innerHTML = `
-    <section class="research-hero">
+    <section class="research-hero ${state.selectedProduct === "DIESEL_0" ? "is-diesel" : "is-gasoline"}">
+      <div class="product-context-row">
+        <span>${escapeHtml(productConfig.fullLabel)}</span>
+        <strong>${escapeHtml(state.selectedProduct === "DIESEL_0" ? "柴油独立数据视图" : "92#汽油正式视图")}</strong>
+      </div>
       <div class="hero-top">
         <div class="hero-point-block">
-          <div class="hero-kicker">${escapeHtml(outright.horizon)} / ${escapeHtml(HORIZON_LABELS[outright.horizon] || outright.horizon)}</div>
+          <div class="hero-kicker">${escapeHtml(productConfig.fullLabel)} / ${escapeHtml(outright.horizon)} / ${escapeHtml(HORIZON_LABELS[outright.horizon] || outright.horizon)}</div>
           <div class="hero-direction ${toneClass(business.tone)}">${escapeHtml(business.label)}</div>
           <div class="hero-point ${toneClass(business.tone)}">${formatNumber(outright.point_value)}</div>
           <div class="hero-delta ${toneClass(outright.direction_label)}">${escapeHtml(renderPredictedDeltaLine(outright))}</div>
-          <div class="hero-range">${escapeHtml(renderRangeLine(outright))}</div>
+          <div class="hero-range">${escapeHtml(renderRangeLine(outright, `${productConfig.label}经营参考区间`))}</div>
         </div>
 
         <div class="hero-stats">
-          <div class="stat-row"><span>当前山东 92#</span><strong>${formatNumber(outright.raw_context?.current_price)}</strong></div>
+          <div class="stat-row"><span>${escapeHtml(productConfig.shandongLabel)}</span><strong>${formatNumber(outright.raw_context?.current_price)}</strong></div>
           <div class="stat-row"><span>综合分</span><strong>${formatNumber(outright.score_value)}</strong></div>
           <div class="stat-row"><span>经营可用性</span><strong>${escapeHtml(business.grade)} / ${escapeHtml(business.usage || confidenceText(outright.confidence_label, outright.confidence_score))}</strong></div>
           <div class="stat-row"><span>方向概率</span><strong>涨 ${valueToPercent(probabilities.up)} / 平 ${valueToPercent(probabilities.flat)} / 跌 ${valueToPercent(probabilities.down)}</strong></div>
           <div class="stat-row"><span>事件风控</span><strong>${escapeHtml(eventGate.label || "低")} / ${escapeHtml(eventGate.action || "模型正常展示")}</strong></div>
           <div class="stat-row"><span>布伦特</span><strong>${formatNumber(state.marketSnapshot?.latest_prices?.brent_active_settlement)}</strong></div>
+          ${
+            state.selectedProduct === "DIESEL_0"
+              ? `<div class="stat-row"><span>柴油裂解</span><strong>${formatNumber(resolveDieselCrackValue())}</strong></div>`
+              : ""
+          }
         </div>
       </div>
 
       ${renderModelComparison(outright)}
 
-      ${renderRegionalPriceForecastStrip(regional)}
+        ${state.selectedProduct === "GASOLINE_92" ? renderRegionalPriceForecastStrip(regional) : renderDieselRegionalPriceStrip()}
 
       <article class="info-card insight-card evidence-panel">
         <h3>预测证据链</h3>
@@ -1923,6 +2557,8 @@ function renderResearch() {
       </div>
 
       <div class="insight-stack">
+        ${state.selectedProduct === "DIESEL_0" ? renderDieselDataQualityCard(state.dashboard?.metadata?.diesel0_data_quality || state.dashboard?.metadata?.diesel0_monitor?.data_quality) : renderDataGate(state.dashboard?.metadata?.data_gate)}
+
         <article class="info-card insight-card">
           <h3>研判摘要</h3>
           <p class="body-text">${renderMultilineText(outright.explanation)}</p>
@@ -1934,7 +2570,7 @@ function renderResearch() {
         </article>
 
         <article class="info-card insight-card business-scorecard-panel">
-          <h3>业务打分模型明细</h3>
+          <h3>${escapeHtml(productConfig.label)}业务打分模型明细</h3>
           ${renderBusinessScorecardPrediction(outright.raw_context?.business_scorecard_prediction)}
           ${renderBusinessScorecard(outright.raw_context?.business_scorecard)}
         </article>
@@ -1952,22 +2588,23 @@ function renderResearch() {
       </div>
 
       <article class="info-card factor-panel">
-        <h3>因子贡献</h3>
+        <h3>${escapeHtml(productConfig.label)}因子贡献</h3>
         <div class="factor-list">${renderFactorList(outright.factor_breakdown)}</div>
       </article>
     </section>`;
 
-  if (state.dashboard.metadata?.regional_spread_error && !regional.length) {
-    const message = `区域价差加载失败：${state.dashboard.metadata.regional_spread_error}`;
-    dom.spreadHeatmap.innerHTML = emptyState(message);
+  const spreadError = selectedRegionalSpreadError();
+  if (spreadError && !regional.length) {
+    const message = `区域价差加载失败：${spreadError}`;
+    if (dom.spreadHeatmap) dom.spreadHeatmap.innerHTML = emptyState(message);
     dom.spreadGrid.innerHTML = emptyState(message);
     return;
   }
-  renderSpreadHeatmap(regional);
-  renderSpreadCards(regional);
+  renderProductSpreadModules(regional);
 }
 
 function renderSpreadHeatmap(predictions) {
+  if (!dom.spreadHeatmap) return;
   if (!predictions?.length) {
     dom.spreadHeatmap.innerHTML = emptyState("暂无区域价差");
     if (dom.freightSettingsPanel) dom.freightSettingsPanel.innerHTML = emptyState("暂无区域运费");
@@ -2038,9 +2675,90 @@ function renderFreightSettings(predictions = []) {
   }).join("");
 }
 
+function renderProductSpreadModules(regional) {
+  const spreadError = selectedRegionalSpreadError();
+  if (!regional?.length && spreadError) {
+    const message = `区域价差加载失败：${spreadError}`;
+    if (dom.spreadHeatmap) dom.spreadHeatmap.innerHTML = emptyState(message);
+    dom.spreadGrid.innerHTML = emptyState(message);
+    return;
+  }
+  renderSpreadHeatmap(regional);
+  renderSpreadCards(regional);
+}
+
+function renderDieselRegionalHeatmap() {
+  if (!dom.spreadHeatmap) return;
+  const rows = dieselRegionRows();
+  if (!rows.length) {
+    dom.spreadHeatmap.innerHTML = emptyState("暂无0#柴油区域价格");
+    return;
+  }
+  const maxAbs = Math.max(...rows.map((item) => Math.abs(Number(item.spread || 0))), 1);
+  dom.spreadHeatmap.innerHTML = rows.map((item) => {
+    const spread = Number(item.spread || 0);
+    const width = Math.max(8, Math.min(100, (Math.abs(spread) / maxAbs) * 100));
+    const tone = spread >= 0 ? "up" : "down";
+    return `
+      <article class="heatmap-row diesel-heatmap-row">
+        <div>
+          <strong>${escapeHtml(item.region)}0#柴油</strong>
+          <span>区域价 ${formatNumber(item.value)} 元/吨</span>
+        </div>
+        <div class="heatbar-wrap">
+          <div class="heatbar ${toneClass(tone)}" style="width:${width}%"></div>
+        </div>
+        <b class="${toneClass(tone)}">${formatNumberTrim(spread, 1)}</b>
+      </article>`;
+  }).join("");
+}
+
+function renderDieselRegionalCards() {
+  const rows = dieselRegionRows();
+  if (!rows.length) {
+    dom.spreadGrid.innerHTML = emptyState("暂无0#柴油区域价差");
+    return;
+  }
+  const settings = freightSettingMap();
+  const shandongPrediction = selectedDiesel0Prediction();
+  const shandongForecast = Number(shandongPrediction?.point_value);
+  const currentShandong = Number(state.dashboard?.latest_prices?.sd_diesel0_market ?? latestPrices().sd_diesel0_market);
+  dom.spreadGrid.innerHTML = rows.map((item) => {
+    const currentRegionPrice = item.value == null ? null : Number(item.value);
+    const currentSpread = item.spread == null ? null : Number(item.spread);
+    const freight = Number(settings[item.regionCode]?.freight_value ?? 0);
+    const currentNetbackSpread = spreadNetback(currentSpread, freight);
+    const forecastRegion = Number.isFinite(currentRegionPrice) && Number.isFinite(shandongForecast) && Number.isFinite(currentShandong)
+      ? currentRegionPrice + (shandongForecast - currentShandong)
+      : null;
+    const currentSpreadTone = Number(currentSpread || 0) >= 0 ? "up" : "down";
+    const currentNetbackTone = Number(currentNetbackSpread || 0) >= 0 ? "up" : "down";
+    const predictedPriceTone = spreadToneComparedToCurrent(forecastRegion, currentRegionPrice);
+    return `
+      <article class="spread-card spread-card--regional diesel-region-card">
+        <div class="spread-card-accent"></div>
+          <div class="spread-top">
+            <div>
+              <div class="spread-region">${escapeHtml(item.region)} - 山东</div>
+            </div>
+            <span class="spread-freight-pill">运费 ${formatNumber(freight)} 元/吨</span>
+          </div>
+        <div class="spread-pair-grid spread-pair-grid--compact">
+          <div class="spread-pair-label">当前区域价</div>
+          <div class="spread-pair-value">${formatNumber(currentRegionPrice)}</div>
+          <div class="spread-pair-label">当前价差</div>
+          <div class="spread-pair-value ${toneClass(currentSpreadTone)}">${formatNumber(currentSpread)}</div>
+          <div class="spread-pair-label">扣运费价差</div>
+          <div class="spread-pair-value ${toneClass(currentNetbackTone)}">${formatNumber(currentNetbackSpread)}</div>
+          <div class="spread-pair-label spread-pair-label--wide">智能体预测价</div>
+          <div class="spread-pair-value ${toneClass(predictedPriceTone)}">${formatNumber(forecastRegion)}</div>
+        </div>
+      </article>`;
+  }).join("");
+}
 function renderSpreadCards(predictions) {
   if (!predictions?.length) {
-    dom.spreadGrid.innerHTML = emptyState("\u6682\u65e0\u533a\u57df\u4ef7\u5dee\u9884\u6d4b");
+    dom.spreadGrid.innerHTML = emptyState("暂无区域价差预测");
     return;
   }
 
@@ -2049,115 +2767,175 @@ function renderSpreadCards(predictions) {
     const region = context.counter_region_name || item.region_code;
     const currentRegionPrice = context.current_counter_region_price;
     const currentSpread = regionalActualSpread(item);
-    const currentNetback = context.netback_spread;
-    const predictedRegionPrice = regionalPredictedPrice(item);
-    const predictedSpread = regionalPredictedSpread(item);
+    const variants = regionalPredictionVariants(item);
+    const agentVariant = variants.find((variant) => variant?.prediction_type !== "regional_baseline") || variants[0] || {};
+    const businessVariant = variants.find((variant) => variant?.prediction_type === "regional_baseline") || variants[1] || null;
+    const agentPredictedPrice = regionalVariantPrice(agentVariant);
+    const businessPredictedPrice = regionalVariantPrice(businessVariant);
     const freight = context.freight_estimate;
-    const predictedNetback = predictedSpread == null || freight == null ? null : Number(predictedSpread) - Number(freight);
+    const currentNetbackSpread = spreadNetback(currentSpread, freight);
     const currentSpreadTone = Number(currentSpread || 0) >= 0 ? "up" : "down";
-    const predictedSpreadTone = Number(predictedSpread || 0) >= 0 ? "up" : "down";
-    const currentNetbackTone = Number(currentNetback || 0) >= 0 ? "up" : "down";
-    const predictedNetbackTone = Number(predictedNetback || 0) >= 0 ? "up" : "down";
+    const currentNetbackTone = Number(currentNetbackSpread || 0) >= 0 ? "up" : "down";
+    const agentPriceTone = spreadToneComparedToCurrent(agentPredictedPrice, currentRegionPrice);
+    const businessPriceTone = spreadToneComparedToCurrent(businessPredictedPrice, currentRegionPrice);
     return `
       <article class="spread-card spread-card--regional">
         <div class="spread-card-accent"></div>
         <div class="spread-top">
           <div>
-            <div class="spread-region">${escapeHtml(region)} - \u5c71\u4e1c</div>
-            <div class="spread-subtitle">\u533a\u57df\u4ef7 - \u5c71\u4e1c\u4ef7</div>
+            <div class="spread-region">${escapeHtml(region)} - 山东</div>
           </div>
-          <div class="spread-head-actions">
-            <span class="spread-freight-pill">\u8fd0\u8d39 ${formatNumber(freight)} \u5143/\u5428</span>
-            <button class="spread-detail-button" type="button" data-spread-detail-index="${index}">\u8be6\u60c5</button>
-          </div>
+          <button class="spread-detail-button" type="button" data-spread-detail-index="${index}">详情</button>
         </div>
-        <div class="spread-pair-grid">
-          <div class="spread-pair-label">\u5f53\u524d\u533a\u57df\u4ef7</div>
-          <div class="spread-pair-label">\u5f53\u524d\u4ef7\u5dee</div>
+        <div class="spread-freight-line">运费 <strong>${formatNumber(freight)}</strong> 元/吨</div>
+        <div class="spread-pair-grid spread-pair-grid--compact">
+          <div class="spread-pair-label">当前区域价</div>
           <div class="spread-pair-value">${formatNumber(currentRegionPrice)}</div>
+          <div class="spread-pair-label">当前价差</div>
           <div class="spread-pair-value ${toneClass(currentSpreadTone)}">${formatNumber(currentSpread)}</div>
-          <div class="spread-pair-label">\u9884\u6d4b\u533a\u57df\u4ef7</div>
-          <div class="spread-pair-label">\u9884\u6d4b\u4ef7\u5dee</div>
-          <div class="spread-pair-value">${formatNumber(predictedRegionPrice)}</div>
-          <div class="spread-pair-value ${toneClass(predictedSpreadTone)}">${formatNumber(predictedSpread)}</div>
-          <div class="spread-pair-label">\u5f53\u524d\u51c0\u56de\u6b3e</div>
-          <div class="spread-pair-label">\u9884\u6d4b\u51c0\u56de\u6b3e</div>
-          <div class="spread-pair-value ${toneClass(currentNetbackTone)}">${formatNumber(currentNetback)}</div>
-          <div class="spread-pair-value ${toneClass(predictedNetbackTone)}">${formatNumber(predictedNetback)}</div>
+          <div class="spread-pair-label">扣运费价差</div>
+          <div class="spread-pair-value ${toneClass(currentNetbackTone)}">${formatNumber(currentNetbackSpread)}</div>
+          <div class="spread-pair-label">智能体预测价</div>
+          <div class="spread-pair-value ${toneClass(agentPriceTone)}">${formatNumber(agentPredictedPrice)}</div>
+          <div class="spread-pair-label">业务打分预测价</div>
+          <div class="spread-pair-value ${toneClass(businessPriceTone)}">${formatNumber(businessPredictedPrice)}</div>
         </div>
       </article>`;
   }).join("");
 }
+function renderRegionalScoreDetailGrid(variant, item) {
+  const scorecard = variant?.scorecard || variant?.business_scorecard || item?.raw_context?.business_scorecard || item?.raw_context?.business_scorecard_prediction?.scorecard;
+  if (scorecard) return renderBusinessScorecard(scorecard, { regionName: item?.raw_context?.counter_region_name || item?.region_code, hideUnresolved: true, hideCoverage: true });
+  const factors = variant?.factor_breakdown || [];
+  if (!factors.length) return '<div class="business-scorecard-empty muted-text">暂无打分明细</div>';
+  return `
+    <div class="business-scorecard-grid regional-scorecard-grid">
+      <article class="business-scorecard-group">
+        <div class="business-scorecard-group-head">
+          <div>
+            <h4>${escapeHtml(variant?.prediction_type === "regional_baseline" ? "业务逻辑因子" : "智能体因子")}</h4>
+            <span>逐项列出取值/规则/得分</span>
+          </div>
+          <strong class="${toneClass(Number(variant?.score ?? item?.score_value ?? 0) >= 0 ? "up" : "down")}">${formatNumber(variant?.score ?? item?.score_value)}</strong>
+        </div>
+        <div class="business-scorecard-rows">
+          ${factors.map((factor) => {
+            const score = Number(factor.contribution ?? factor.factor_score ?? 0);
+            const evidence = Array.isArray(factor.evidence) ? factor.evidence.join("；") : factor.evidence;
+            return `
+              <div class="business-scorecard-row">
+                <div class="business-scorecard-name">
+                  <span>${escapeHtml(factor.factor_name || factor.factor_group || "-")}</span>
+                  <em>${escapeHtml(factor.factor_group || "区域预测因子")}</em>
+                </div>
+                <div class="business-scorecard-value">
+                  <span>取值/证据</span>
+                  <strong>${escapeHtml(scorecardValueText(factor.factor_score ?? factor.contribution ?? "-"))}</strong>
+                  <em>${escapeHtml(evidence || "已取数")}</em>
+                </div>
+                <div class="business-scorecard-match">
+                  <span>规则</span>
+                  <strong>${escapeHtml(variant?.calculation || variant?.basis || "按区域规则计入")}</strong>
+                </div>
+                <div class="business-scorecard-score">
+                  <span>得分</span>
+                  <strong class="${toneClass(score >= 0 ? "up" : "down")}">${formatNumber(score)}</strong>
+                </div>
+              </div>`;
+          }).join("")}
+        </div>
+      </article>
+    </div>`;
+}
 
-function showSpreadDetail(index) {
-  const predictions = selectedRegionalPredictions();
-  const item = predictions?.[Number(index)];
+function renderRegionalVariantDetailCard(variant, item) {
+  if (!variant) return emptyState("暂无该逻辑详情");
+  const direction = variant.direction_label || item?.direction_label || "flat";
+  const label = variant?.prediction_type === "regional_baseline" ? "业务逻辑" : "智能体";
+  return `
+    <article class="info-card regional-variant-detail-card">
+      <h3>${label}预测明细</h3>
+      <div class="business-scorecard-prediction">
+        <div class="business-scorecard-prediction-head">
+          <span>${escapeHtml(variant.model_name || label)}</span>
+          <strong class="${toneClass(direction)}">${formatNumber(regionalVariantPrice(variant))}</strong>
+        </div>
+        <div class="business-scorecard-prediction-grid">
+          <div><span>预测点位</span><strong>${formatNumber(regionalVariantPrice(variant))}</strong></div>
+          <div><span>预测变化</span><strong>${formatNumber(variant.predicted_delta)}</strong></div>
+          <div><span>预测区间</span><strong>${formatNumber(variant.predicted_region_price_range_lower)} ~ ${formatNumber(variant.predicted_region_price_range_upper)}</strong></div>
+          <div><span>${label}总分</span><strong>${formatNumber(variant.score ?? item?.score_value)}</strong></div>
+        </div>
+        <p>${escapeHtml(variant.calculation || variant.basis || "")}</p>
+      </div>
+      ${renderRegionalScoreDetailGrid(variant, item)}
+    </article>`;
+}
+
+function showSpreadDetail(detail = {}) {
+  const item = typeof detail === "object" ? findRegionalPredictionForDetail(detail) : findRegionalPredictionForDetail({ index: detail });
   if (!item || !dom.spreadDetailDialog) return;
   const region = item.raw_context?.counter_region_name || item.region_code;
-  const tradeAction = item.raw_context?.trade_action || {};
   const variants = regionalPredictionVariants(item);
   const compositeVariant = variants.find((variant) => variant.prediction_type === "regional_composite") || variants[0] || {};
   const baselineVariant = variants.find((variant) => variant.prediction_type === "regional_baseline") || variants[1] || null;
-  const predictedRegionPrice = regionalVariantPrice(compositeVariant);
-  const predictedSpread = regionalVariantSpread(compositeVariant);
+  const predictedPrice = regionalVariantPrice(compositeVariant);
+  const baselinePrice = regionalVariantPrice(baselineVariant);
   const actualSpread = regionalActualSpread(item);
+  const freight = item.raw_context?.freight_estimate;
+  const currentRegionPrice = item.raw_context?.current_counter_region_price;
+  const currentNetbackPrice = regionNetbackPrice(currentRegionPrice, freight);
+  const currentNetbackSpread = spreadNetback(actualSpread, freight);
+  const currentSpreadTone = Number(actualSpread || 0) >= 0 ? "up" : "down";
+  const currentNetbackTone = Number(currentNetbackSpread || 0) >= 0 ? "up" : "down";
+  const agentPriceTone = spreadToneComparedToCurrent(predictedPrice, currentRegionPrice);
+  const businessPriceTone = spreadToneComparedToCurrent(baselinePrice, currentRegionPrice);
   if (dom.spreadDetailTitle) dom.spreadDetailTitle.textContent = `山东 - ${region}价差详情`;
   if (dom.spreadDetailSubtitle) {
     dom.spreadDetailSubtitle.textContent = `${item.horizon} / ${directionLabel(item.direction_label, true)} / ${confidenceText(item.confidence_label, item.confidence_score)}`;
   }
   if (dom.spreadDetailContent) {
     dom.spreadDetailContent.innerHTML = `
-      <section class="spread-detail-hero">
+      <section class="spread-detail-hero spread-detail-hero--regional">
         <div>
-          <span>综合预测区域单价</span>
-          <strong class="${toneClass(item.direction_label)}">${formatNumber(predictedRegionPrice)}</strong>
-          <small>区域-山东价差 ${formatNumber(predictedSpread)}</small>
+          <span>当前区域价</span>
+          <strong>${formatNumber(currentRegionPrice)}</strong>
+          <small>当前区域市场价</small>
         </div>
         <div>
-          <span>基准预测区域单价</span>
-          <strong class="${toneClass(baselineVariant?.direction_label || "flat")}">${formatNumber(regionalVariantPrice(baselineVariant))}</strong>
-          <small>区域-山东价差 ${formatNumber(regionalVariantSpread(baselineVariant))}</small>
+          <span>扣运费后区域价</span>
+          <strong>${formatNumber(currentNetbackPrice)}</strong>
+          <small>当前区域价 - 运费 ${formatNumber(freight)} 元/吨</small>
         </div>
         <div>
-          <span>当前真实价差</span>
-          <strong>${formatNumber(actualSpread)}</strong>
-          <small>当前区域价 ${formatNumber(item.raw_context?.current_counter_region_price)}</small>
+          <span>当前价差</span>
+          <strong class="${toneClass(currentSpreadTone)}">${formatNumber(actualSpread)}</strong>
+          <small>区域价 - 山东价</small>
         </div>
         <div>
-          <span>当前净回款</span>
-          <strong>${formatNumber(item.raw_context?.netback_spread)}</strong>
-          <small>运费 ${formatNumber(item.raw_context?.freight_estimate)} 元/吨</small>
+          <span>扣运费价差</span>
+          <strong class="${toneClass(currentNetbackTone)}">${formatNumber(currentNetbackSpread)}</strong>
+          <small>当前价差 - 运费</small>
+        </div>
+        <div>
+          <span>智能体预测价</span>
+          <strong class="${toneClass(agentPriceTone)}">${formatNumber(predictedPrice)}</strong>
+          <small>对比当前区域价 ${formatNumber(currentRegionPrice)}</small>
+        </div>
+        <div>
+          <span>业务打分预测价</span>
+          <strong class="${toneClass(businessPriceTone)}">${formatNumber(baselinePrice)}</strong>
+          <small>对比当前区域价 ${formatNumber(currentRegionPrice)}</small>
         </div>
       </section>
 
-      <section class="spread-detail-grid">
-        <article class="info-card">
-          <h3>核心驱动</h3>
-          <div class="driver-list">${renderDriverList(item.driver_summary)}</div>
-        </article>
-        <article class="info-card">
+      <section class="spread-detail-grid spread-detail-grid--regional">
+        <article class="info-card spread-detail-advice-card">
           <h3>经营建议</h3>
-          <div class="advice-list">${renderAdviceList(item.operating_advice)}</div>
+          <div class="advice-list advice-list--horizontal">${renderAdviceList(item.operating_advice)}</div>
         </article>
-        <article class="info-card">
-          <h3>价差口径</h3>
-          <div class="factor-list">
-            <div class="factor-item"><div class="factor-label">价差公式</div><div class="factor-value">${escapeHtml(item.raw_context?.actual_spread_formula || "真实展示价差=当前目标区域92#价-当前山东92#价")}</div></div>
-            <div class="factor-item"><div class="factor-label">净回款</div><div class="factor-value">价差 - 运费 ${formatNumber(item.raw_context?.freight_estimate)}</div></div>
-            <div class="factor-item"><div class="factor-label">综合预测</div><div class="factor-value">${escapeHtml(compositeVariant?.basis || "状态表同状态变化中位数+区域规则修正")}</div></div>
-            <div class="factor-item"><div class="factor-label">基准预测</div><div class="factor-value">${escapeHtml(baselineVariant?.basis || "区域规则基准未返回")}</div></div>
-            <div class="factor-item"><div class="factor-label">区间口径</div><div class="factor-value">${escapeHtml(item.raw_context?.range_basis?.risk_label || "经营风险扩展区间")}</div></div>
-            <div class="factor-item"><div class="factor-label">校准状态</div><div class="factor-value">${escapeHtml(item.raw_context?.calibration?.status || "-")} / 样本 ${formatNumberTrim(item.raw_context?.calibration?.sample_size ?? 0, 0)}</div></div>
-          </div>
-        </article>
-        <article class="info-card">
-          <h3>规则智能体结论</h3>
-          ${renderRuleAgentConclusions(item.agent_claims)}
-        </article>
-        <article class="info-card">
-          <h3>因子贡献</h3>
-          <div class="factor-list">${renderFactorList(item.factor_breakdown, 8)}</div>
-        </article>
+        ${renderRegionalVariantDetailCard(compositeVariant, item)}
+        ${renderRegionalVariantDetailCard(baselineVariant, item)}
       </section>`;
   }
   if (typeof dom.spreadDetailDialog.showModal === "function") {
@@ -2166,7 +2944,6 @@ function showSpreadDetail(index) {
     dom.spreadDetailDialog.setAttribute("open", "");
   }
 }
-
 function closeSpreadDetail() {
   if (!dom.spreadDetailDialog) return;
   if (typeof dom.spreadDetailDialog.close === "function") {
@@ -2263,6 +3040,9 @@ function fallbackBriefingSnapshotPrices(sections) {
     if (label.includes("山东92#")) output.sd_gas92_market = value;
     if (label.includes("全国92#")) output.cn_gas92_market = value;
     if (label.includes("华东92#")) output.east_china_gas92_market = value;
+    if (label.includes("山东0#柴油")) output.sd_diesel0_market = value;
+    if (label.includes("全国0#柴油")) output.cn_diesel0_market = value;
+    if (label.includes("华东0#柴油")) output.east_china_diesel0_market = value;
   });
   return output;
 }
@@ -2362,13 +3142,19 @@ function renderMorningBriefing() {
   const payload = state.latestBriefing;
   const sections = parseBriefingSections(payload.content_markdown);
   const outright = payload.outright_predictions || [];
+  const diesel0 = payload.diesel0_predictions || payload.metadata?.diesel0_predictions || [];
   const regional = payload.regional_spread_predictions || [];
   const lead = outright.find((item) => item.horizon === "D1") || outright[0] || null;
+  const dieselLead = diesel0.find((item) => item.horizon === "D1") || diesel0[0] || null;
   const leadBusiness = businessDirectionInfo(lead);
+  const dieselLeadBusiness = businessDirectionInfo(dieselLead);
   const snapshot = payload.metadata?.snapshot_prices || fallbackBriefingSnapshotPrices(sections);
   const policyHighlights = buildBriefingPolicyHighlights(payload, sections);
   const eventHighlights = buildBriefingEventHighlights(payload, sections);
-  const adviceItems = (lead?.operating_advice || []).slice(0, 3);
+  const adviceItems = [
+    ...(lead?.operating_advice || []).slice(0, 2).map((item) => ({ ...item, productLabel: "92#汽油" })),
+    ...(dieselLead?.operating_advice || []).slice(0, 2).map((item) => ({ ...item, productLabel: "0#柴油" })),
+  ];
   const summaryText = normalizeNarrativeText(lead?.explanation || "暂无晨会摘要");
   const marketModeText =
     lead?.degrade_flag || payload.metadata?.market_data_reason
@@ -2481,8 +3267,9 @@ function renderMorningBriefing() {
               adviceItems.length
                 ? adviceItems
                     .map(
-                      (item) => `
-                        <article class="briefing-list-card">
+                        (item) => `
+                          <article class="briefing-list-card">
+                          <div class="briefing-list-meta">${escapeHtml(item.productLabel || "成品油")}</div>
                           <div class="briefing-list-title">${escapeHtml(normalizeNarrativeText(item.title || "建议"))}</div>
                           <div class="briefing-list-body">${escapeHtml(normalizeNarrativeText(item.action || ""))}</div>
                           <small>${escapeHtml(normalizeNarrativeText(item.rationale || ""))}</small>
@@ -2511,6 +3298,7 @@ function renderMorningBriefing() {
                     </div>
                     <div class="regional-variant-list">${renderRegionalVariantRows(item, { compact: true })}</div>
                     <small>真实价差 ${formatNumber(regionalActualSpread(item))}</small>
+                    <button class="spread-detail-button" type="button" ${regionalDetailButtonAttrs(item, selectedRegionalPredictions().indexOf(item))}>详情</button>
                   </article>`
               )
               .join("")}
@@ -2565,7 +3353,8 @@ function renderAlerts() {
     const region = item.affected_region || "重点区域";
     const product = item.affected_product || "92#汽油";
     const statusMap = { new: "新触发", reviewing: "待确认", tracking: "跟踪中", resolved: "已解除", dismissed: "误报" };
-    const status = statusMap[item.status] || item.status || "跟踪中";
+    const machine = item.state_machine || {};
+    const status = machine.current_label || statusMap[item.status] || item.status || "跟踪中";
     const confidence = item.confidence || "中";
     const action = item.recommended_action || item.action || "人工复核后再调整报价和库存动作";
     const titleHtml = item.url
@@ -2589,6 +3378,15 @@ function renderAlerts() {
           <span>可靠度 ${escapeHtml(confidence)}</span>
         </div>
         <div class="alert-action">${escapeHtml(action)}</div>
+        <div class="alert-state-machine">
+          <span>状态机：${escapeHtml(status)}</span>
+          <span>下一步：${escapeHtml(machine.next_action || "人工复核")}</span>
+          ${
+            item.review_actor
+              ? `<span>最近处理：${escapeHtml(item.review_actor)} / ${escapeHtml(formatDateTime(item.review_updated_at))}</span>`
+              : ""
+          }
+        </div>
         <div class="alert-controls">
           <button type="button" data-alert-action="tracking" data-alert-id="${escapeHtml(item.alert_id || "")}">跟踪</button>
           <button type="button" data-alert-action="resolved" data-alert-id="${escapeHtml(item.alert_id || "")}">解除</button>
@@ -2605,6 +3403,7 @@ function renderAlerts() {
 
 function renderPriceHistory() {
   if (!dom.priceHistoryChart || !dom.priceHistorySeries) return;
+  syncPriceHistorySeriesForProduct();
   const payload = state.priceHistory;
   if (!payload) {
     dom.priceHistorySeries.innerHTML = "";
@@ -2614,7 +3413,26 @@ function renderPriceHistory() {
   }
 
   setChip(dom.priceHistoryMeta, `${state.priceHistoryDays}天`);
-  const available = payload.available_series || [];
+  const productDefaults = currentProductConfig().historySeries || PRICE_HISTORY_DEFAULT_SERIES;
+  const payloadKeys = new Set((payload.series || []).map((item) => item.key));
+  const payloadMatchesProduct = productDefaults.some((key) => payloadKeys.has(key));
+  if (!payloadMatchesProduct) {
+    dom.priceHistorySeries.innerHTML = productDefaults
+      .map((key) => {
+        const label = PRICE_LABELS.find((item) => item[0] === key)?.[1] || key;
+        return `
+          <label class="history-series-chip is-active">
+            <input type="checkbox" value="${escapeHtml(key)}" checked />
+            <i class="history-chip-dot"></i>
+            <span>${escapeHtml(label)}</span>
+          </label>`;
+      })
+      .join("");
+    dom.priceHistoryChart.innerHTML = emptyState("价格走势加载中");
+    setChip(dom.priceHistoryMeta, "刷新中", "loading");
+    return;
+  }
+  const available = (payload.available_series || []).filter((item) => productDefaults.includes(item.key));
   const selectedSeries = (payload.series || []).filter((item) => state.priceHistorySeries.includes(item.key));
   dom.priceHistorySeries.innerHTML = available.map((item) => {
     const active = state.priceHistorySeries.includes(item.key);
@@ -2644,17 +3462,19 @@ function renderPriceHistory() {
   const isClearviewChart = Boolean(dom.priceHistoryChart.closest("#view-clearview"));
   const measuredChartWidth = Math.round(dom.priceHistoryChart.clientWidth || 0);
   const width = isClearviewChart ? Math.min(Math.max(measuredChartWidth, 520), 1100) : 260;
-  const height = isClearviewChart ? 92 : 150;
+  const height = isClearviewChart ? 150 : 150;
   const left = 34;
-  const right = 8;
+  const right = isClearviewChart ? 34 : 22;
   const top = 14;
   const bottom = 24;
   const innerWidth = width - left - right;
   const innerHeight = height - top - bottom;
   const allDates = selectedSeries.flatMap((series) => (series.points || []).map((point) => point.date)).sort();
   const uniqueDates = [...new Set(allDates)];
+  const dateIndexMap = new Map(uniqueDates.map((dateValue, index) => [dateValue, index]));
   const yFor = (value) => top + (1 - (Number(value) - yMin) / Math.max(yMax - yMin, 1)) * innerHeight;
   const xFor = (index, count) => left + (count <= 1 ? 0 : (index / (count - 1)) * innerWidth);
+  const xForDate = (dateValue) => xFor(dateIndexMap.get(dateValue) ?? 0, Math.max(uniqueDates.length, 1));
   const tickStep = Math.max(Math.ceil(uniqueDates.length / (isClearviewChart ? 7 : 3)), 1);
   const dateTicks = uniqueDates
     .map((dateValue, index) => ({ dateValue, index }))
@@ -2672,14 +3492,14 @@ function renderPriceHistory() {
     const points = series.points || [];
     const d = points
       .map((point, pointIndex) => {
-        const x = xFor(pointIndex, points.length);
+        const x = xForDate(point.date);
         const y = yFor(point.value);
         return `${pointIndex === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
       })
       .join(" ");
     const markers = points
       .map((point, pointIndex) => {
-        const x = xFor(pointIndex, points.length);
+        const x = xForDate(point.date);
         const y = yFor(point.value);
         const isLast = pointIndex === points.length - 1;
         const ariaLabel = `${series.label} ${formatDate(point.date)} ${formatNumber(point.value, 0)} 元/吨`;
@@ -2793,10 +3613,14 @@ function positionHistoryTooltip(pointerLike, tooltip) {
 async function loadPriceHistory() {
   if (!hasPermission("workbench.view")) return;
   if (!dom.priceHistoryChart) return;
+  syncPriceHistorySeriesForProduct();
   const requestToken = ++state.priceHistoryRequestToken;
   setChip(dom.priceHistoryMeta, "刷新中", "loading");
   try {
-    const params = new URLSearchParams({ days: String(state.priceHistoryDays) });
+    const params = new URLSearchParams({
+      days: String(state.priceHistoryDays),
+      product: state.selectedProduct,
+    });
     state.priceHistorySeries.forEach((key) => params.append("series", key));
     const payload = await fetchJson(`/api/v1/market/price-history?${params.toString()}`);
     if (requestToken !== state.priceHistoryRequestToken) return;
@@ -3106,20 +3930,40 @@ function renderAccuracySummary() {
     return;
   }
   const summary = payload.summary || {};
+  const gateChecks = summary.release_gate_checks || [];
+  const gateClass = summary.release_gate_passed ? " is-primary" : " is-warning";
   const cards = [
+    ["发布闸门", summary.release_gate_label || "样本不足", summary.release_gate_reason || "等待复盘指标", gateClass],
     ["已验证样本", formatNumberTrim(summary.sample_size, 0), `待验证 ${formatNumberTrim(summary.pending_size, 0)} 条`],
     ["平均绝对偏差", summary.mae == null ? "-" : formatNumberTrim(summary.mae, 1), "元/吨"],
     ["方向命中率", formatPercentValue(summary.direction_accuracy), "涨跌方向"],
     ["区间命中率", formatPercentValue(summary.range_hit_rate), "真实价落入预测区间"],
     ["±50内占比", formatPercentValue(summary.within_50_rate), "经营可用性观察"],
   ];
-  dom.accuracySummary.innerHTML = cards.map(([label, value, sub], index) => `
-    <article class="accuracy-summary-card${index === 1 ? " is-primary" : ""}">
+  const gateDetail = gateChecks.length
+    ? `<article class="accuracy-summary-card release-gate-detail">
+        <span>闸门明细</span>
+        <div class="gate-check-grid">
+          ${gateChecks
+            .map(
+              (item) => `
+                <div class="gate-check ${item.passed ? "pass" : "warn"}">
+                  <strong>${escapeHtml(item.label)}</strong>
+                  <span>${item.value == null ? "-" : escapeHtml(String(item.value))}</span>
+                  <small>门槛 ${escapeHtml(String(item.threshold))}${escapeHtml(item.unit || "")}</small>
+                </div>`
+            )
+            .join("")}
+        </div>
+      </article>`
+    : "";
+  dom.accuracySummary.innerHTML = cards.map(([label, value, sub, extraClass], index) => `
+    <article class="accuracy-summary-card${extraClass || (index === 2 ? " is-primary" : "")}">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(value)}</strong>
       <small>${escapeHtml(sub)}</small>
     </article>
-  `).join("");
+  `).join("") + gateDetail;
 }
 
 function renderAccuracyChart() {
@@ -3310,17 +4154,29 @@ function renderFeedCards(items, kind) {
       kind === "policy"
         ? `汽油 ${formatNumber(item.gasoline_change_yuan_per_ton, 0)} / 柴油 ${formatNumber(item.diesel_change_yuan_per_ton, 0)}`
         : `重要度 ${formatNumber(item.importance_score, 1)}`;
+    const productScope = item.affected_product || inferFeedProductScope(title, excerpt, kind);
     return `
       <article class="feed-card">
         ${titleHtml}
         <div class="feed-row">
           <span>${escapeHtml(source)}</span>
           <span>${escapeHtml(time)}</span>
+          <span>${escapeHtml(productScope)}</span>
         </div>
         <div class="feed-excerpt">${renderMultilineText(excerpt || extra)}</div>
         <div class="feed-meta">${escapeHtml(extra)}</div>
       </article>`;
   }).join("");
+}
+
+function inferFeedProductScope(title, excerpt, kind) {
+  if (kind === "policy") return "92#汽油 / 0#柴油";
+  const text = `${title || ""} ${excerpt || ""}`.replaceAll("０", "0").replaceAll("＃", "#");
+  if (text.includes("汽柴油") || text.includes("成品油")) return "92#汽油 / 0#柴油";
+  const products = [];
+  if (text.includes("92#") || text.includes("92号") || text.includes("汽油")) products.push("92#汽油");
+  if (text.includes("0#柴油") || text.includes("0号柴油") || text.includes("柴油")) products.push("0#柴油");
+  return products.length ? products.join(" / ") : "成品油";
 }
 
 function renderPolicyPage() {
@@ -4050,7 +4906,7 @@ function renderProposalPanel() {
       <div class="proposal-row">
         <div>
           <div class="proposal-name">${escapeHtml(proposal.summary)}</div>
-          <div class="feed-meta">${escapeHtml(formatDateTime(proposal.created_at))} / ${escapeHtml(proposal.status)}</div>
+          <div class="feed-meta">${escapeHtml(formatDateTime(proposal.created_at))} / ${escapeHtml(statusText)}</div>
         </div>
         <span class="tag">${escapeHtml(proposal.proposal_id)}</span>
       </div>
@@ -4091,8 +4947,9 @@ function renderProposalPanel() {
 function mergeNarrativePayload(payload) {
   if (!state.dashboard || !payload) return;
   const horizon = payload.selected_horizon;
+  if (!DEFAULT_HORIZONS.includes(horizon)) return;
   state.narrativeCache[horizon] = cloneData(payload);
-  state.dashboard.outright_predictions = (state.dashboard.outright_predictions || []).map((item) =>
+  state.dashboard.outright_predictions = (filterActiveHorizons(state.dashboard.outright_predictions || [])).map((item) =>
     item.horizon === horizon ? payload.outright_prediction : item
   );
   state.dashboard.outright_prediction =
@@ -4261,6 +5118,7 @@ async function loadMarketSnapshot() {
     payload.__previousPrices = previous;
     state.marketSnapshot = payload;
     renderMarketSnapshot();
+    renderProductSpreadModules(selectedRegionalPredictions());
   } catch (error) {
     console.error(error);
   }
@@ -4332,17 +5190,21 @@ async function loadPolicyFeed(options = {}) {
 }
 
 async function loadLatestBriefing() {
+  if (!BRIEFING_FEATURE_ENABLED) return;
   if (!hasPermission("workbench.view")) return;
   try {
     state.latestBriefing = await fetchJson("/api/v1/briefings/latest");
     renderMorningBriefing();
   } catch (error) {
     console.error(error);
-    dom.briefingContent.innerHTML = emptyState(`晨报加载失败：${error.message || error}`);
+    state.latestBriefing = null;
+    if (dom.briefingContent) dom.briefingContent.innerHTML = emptyState("\u6682\u65e0\u6668\u62a5\uff0c\u70b9\u51fb\u751f\u6210\u6668\u62a5\u624d\u4f1a\u91cd\u65b0\u8ba1\u7b97");
+    setChip(dom.briefingMeta, "\u6682\u65e0\u6668\u62a5");
   }
 }
 
 async function generateBriefing() {
+  if (!BRIEFING_FEATURE_ENABLED) return;
   if (!hasPermission("briefing.generate")) return;
   dom.briefingGenerate.disabled = true;
   setChip(dom.briefingMeta, "晨报生成中", "loading");
@@ -4367,12 +5229,16 @@ async function loadLatestDashboard() {
   setGlobalStatus("\u52a0\u8f7d\u6700\u8fd1\u4e00\u6b21\u9884\u6d4b", "loading");
   try {
     const params = new URLSearchParams({ horizon: state.selectedHorizon || "D1" });
-    const payload = await fetchJson(`/api/v1/dashboard/shandong-gasoline-92/latest?${params.toString()}`);
-    state.baselineDashboard = cloneData(payload);
-    state.dashboard = cloneData(payload);
+    const payload = await fetchJson(`/api/v1/dashboard/shandong-gasoline-92/latest?${params.toString()}`, { timeoutMs: 15000 });
+    state.baselineDashboard = sanitizeDashboardHorizons(cloneData(payload));
+    state.dashboard = sanitizeDashboardHorizons(cloneData(payload));
     applyFreightSettingsToRegionalPredictions();
     syncDashboardPriceSnapshot(payload);
-    state.availableHorizons = payload.metadata?.available_horizons || DEFAULT_HORIZONS;
+    if (!payload.metadata?.diesel0_predictions?.length) {
+      await loadMarketSnapshot();
+    }
+    state.availableHorizons = DEFAULT_HORIZONS.filter((horizon) => payload.metadata?.available_horizons?.includes(horizon) ?? true);
+    if (!state.availableHorizons.length) state.availableHorizons = [...DEFAULT_HORIZONS];
     if (!state.availableHorizons.includes(state.selectedHorizon)) {
       state.selectedHorizon = state.availableHorizons[0] || "D1";
     }
@@ -4381,7 +5247,11 @@ async function loadLatestDashboard() {
     setGlobalStatus("\u5df2\u52a0\u8f7d\u6700\u8fd1\u4e00\u6b21\u9884\u6d4b\uff1b\u70b9\u51fb\u751f\u6210\u65b0\u9884\u6d4b\u624d\u91cd\u65b0\u8ba1\u7b97");
   } catch (error) {
     console.error(error);
-    setGlobalStatus("\u672a\u627e\u5230\u5386\u53f2\u9884\u6d4b\uff0c\u8bf7\u70b9\u51fb\u751f\u6210\u65b0\u9884\u6d4b", "error");
+    const message = error?.message || error;
+    setGlobalStatus("\u6700\u8fd1\u9884\u6d4b\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u70b9\u51fb\u751f\u6210\u65b0\u9884\u6d4b", "error");
+    if (dom.outrightPanel) dom.outrightPanel.innerHTML = emptyState(`\u6700\u8fd1\u7814\u7a76\u7ed3\u8bba\u52a0\u8f7d\u5931\u8d25\uff1a${message}`);
+    if (dom.spreadHeatmap) dom.spreadHeatmap.innerHTML = emptyState("\u533a\u57df\u4ef7\u5dee\u5f85\u751f\u6210\u65b0\u9884\u6d4b");
+    if (dom.spreadGrid) dom.spreadGrid.innerHTML = emptyState("\u533a\u57df\u4ef7\u5dee\u5f85\u751f\u6210\u65b0\u9884\u6d4b");
     renderFreightSettings([]);
   } finally {
     state.dashboardLoading = false;
@@ -4412,12 +5282,13 @@ async function loadDashboard() {
       body: JSON.stringify(requestBody()),
       timeoutMs: 180000,
     });
-    state.baselineDashboard = cloneData(payload);
-    state.dashboard = cloneData(payload);
+    state.baselineDashboard = sanitizeDashboardHorizons(cloneData(payload));
+    state.dashboard = sanitizeDashboardHorizons(cloneData(payload));
     applyFreightSettingsToRegionalPredictions();
     syncDashboardPriceSnapshot(payload);
     state.narrativeCache = {};
-    state.availableHorizons = payload.metadata?.available_horizons || DEFAULT_HORIZONS;
+    state.availableHorizons = DEFAULT_HORIZONS.filter((horizon) => payload.metadata?.available_horizons?.includes(horizon) ?? true);
+    if (!state.availableHorizons.length) state.availableHorizons = [...DEFAULT_HORIZONS];
     if (!state.availableHorizons.includes(state.selectedHorizon)) {
       state.selectedHorizon = state.availableHorizons[0] || "D1";
     }
@@ -4430,7 +5301,7 @@ async function loadDashboard() {
   } catch (error) {
     console.error(error);
     dom.outrightPanel.innerHTML = emptyState(`研究结论加载失败：${error.message || error}`);
-    dom.spreadHeatmap.innerHTML = emptyState("区域价差加载失败");
+    if (dom.spreadHeatmap) dom.spreadHeatmap.innerHTML = emptyState("区域价差加载失败");
     dom.spreadGrid.innerHTML = emptyState("区域价差加载失败");
     setGlobalStatus("研究结论加载失败", "error");
   } finally {
@@ -4687,6 +5558,7 @@ function syncHash() {
 function activateMainView(view) {
   const nextView = hasViewAccess(view) ? view : firstAccessibleView(view);
   state.currentView = nextView;
+  document.body.dataset.activeView = nextView;
   dom.mainTabs.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.viewTarget === nextView);
   });
@@ -4739,6 +5611,48 @@ function startSnapshotPolling() {
   state.snapshotTimer = setInterval(() => {
     loadMarketSnapshot();
   }, 15000);
+}
+
+async function loadBrentLive() {
+  if (!hasPermission("workbench.view")) return;
+  try {
+    const payload = await fetchJson("/api/v1/market/brent-live", { timeoutMs: 10000 });
+    state.brentLive = payload;
+    if (payload?.latest_price != null) {
+      const previous = state.marketSnapshot?.latest_prices || {};
+      state.marketSnapshot = {
+        ...(state.marketSnapshot || {}),
+        latest_prices: {
+          ...previous,
+          brent_active_settlement: payload.latest_price,
+        },
+        metadata: {
+          ...(state.marketSnapshot?.metadata || {}),
+          brent_live_mode: payload?.metadata?.market_data_mode,
+          brent_live_reason: payload?.metadata?.market_data_reason,
+        },
+      };
+      renderMarketSnapshot();
+      if (BRIEFING_FEATURE_ENABLED) renderMorningBriefing();
+    }
+    syncLiveBrentNodes();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function startBrentPolling() {
+  if (state.brentTimer) clearInterval(state.brentTimer);
+  state.brentTimer = setInterval(() => {
+    loadBrentLive();
+  }, 30000);
+}
+
+function startPolicyPolling() {
+  if (state.policyTimer) clearInterval(state.policyTimer);
+  state.policyTimer = setInterval(() => {
+    loadPolicyFeed({ forceLatest: true });
+  }, 900000);
 }
 
 function syncLiveBrentNodes() {
@@ -4795,9 +5709,11 @@ function renderSnapshotMetricCard({
           <div class="metric-label">${escapeHtml(label)}</div>
         ${live ? '<div class="live-pill">秒级</div>' : ""}
       </div>
-      <div class="metric-value"${liveValueAttr}>${escapeHtml(value)}</div>
+      <div class="metric-value-row">
+        <div class="metric-value"${liveValueAttr}>${escapeHtml(value)}</div>
+        ${unit ? `<span class="metric-unit">${escapeHtml(unit)}</span>` : ""}
+      </div>
       <div class="metric-sub">
-        <span>${escapeHtml(unit || "")}</span>
         <span>${escapeHtml(sub || "")}</span>
       </div>
       ${meta ? `<div class="metric-live-detail">${escapeHtml(meta)}</div>` : ""}
@@ -4811,173 +5727,73 @@ function oilchemMetricDate(record) {
 
 function buildOilchemMetricCards(snapshot) {
   const metrics = snapshot.metadata?.oilchem_metrics || {};
-  const ratio = metrics.production_sales_ratio;
-  const capacity = metrics.capacity_utilization;
-  const profit = metrics.refining_profit;
-  const maintenance = metrics.maintenance_plan;
-  const inventory = metrics.inventory;
-  const cards = [
-    ratio && renderSnapshotMetricCard({
-      label: "汽油产销率",
-      value: formatNumberTrim(ratio.gasoline_ratio, 2),
-      unit: "%",
-      sub: `日期 ${oilchemMetricDate(ratio)}`,
-      meta: ratio.gasoline_change_pct != null ? `环比 ${formatNumberTrim(ratio.gasoline_change_pct, 2)}%` : "隆众日度",
-    }),
-    capacity && renderSnapshotMetricCard({
-      label: "地炼开工率",
-      value: formatNumberTrim(capacity.capacity_utilization, 2),
-      unit: "%",
-      sub: `日期 ${oilchemMetricDate(capacity)}`,
-      meta: capacity.capacity_utilization_wow_pct != null
-        ? `环比 ${formatNumberTrim(capacity.capacity_utilization_wow_pct, 2)}%`
-        : "隆众周度",
-    }),
-    profit && renderSnapshotMetricCard({
-      label: "炼油利润",
-      value: formatNumberTrim(profit.refining_profit, 0),
-      unit: "元/吨",
-      sub: `日期 ${oilchemMetricDate(profit)}`,
-      meta: profit.refining_profit_wow_pct != null
-        ? `环比 ${formatNumberTrim(profit.refining_profit_wow_pct, 2)}%`
-        : "隆众周度",
-    }),
-    inventory && renderSnapshotMetricCard({
-      label: "汽油库存",
-      value: formatNumberTrim(inventory.gasoline_inventory, 2),
-      unit: "万吨",
-      sub: `日期 ${oilchemMetricDate(inventory)}`,
-      meta: inventory.gasoline_inventory_change_mom != null
-        ? `环比 ${formatNumberTrim(inventory.gasoline_inventory_change_mom, 2)} 万吨`
-        : "隆众库存",
-    }),
-    inventory && renderSnapshotMetricCard({
-      label: "汽油库容率",
-      value: formatNumberTrim(inventory.gasoline_inventory_capacity_rate, 2),
-      unit: "%",
-      sub: `日期 ${formatDate(inventory.gasoline_inventory_capacity_rate_date || inventory.observation_date || inventory.period_end || inventory.period_start)}`,
-      meta: inventory.total_inventory != null
-        ? `汽柴油总量 ${formatNumberTrim(inventory.total_inventory, 2)} 万吨`
-        : "隆众库存",
-    }),
-    maintenance && renderSnapshotMetricCard({
-      label: "检修产能",
-      value: formatNumberTrim(maintenance.active_capacity, 0),
-      unit: "万吨/年",
-      sub: `日期 ${oilchemMetricDate(maintenance)}`,
-      meta: `当前 ${formatNumberTrim(maintenance.active_count, 0)} 套装置`,
-    }),
-  ].filter(Boolean);
-
-  if (cards.length) return cards;
-  const errors = metrics.errors || {};
-  const firstError = Object.values(errors)[0];
+  const ratio = metrics.production_sales_ratio || {};
+  const capacity = metrics.capacity_utilization || {};
+  const brentPrices = latestPrices();
+  const brentValue = brentPrices.brent_active_settlement ?? state.brentLive?.price ?? snapshot.latest_prices?.brent_active_settlement;
+  const brentDate = priceSnapshotDate("brent_active_settlement", snapshot) || state.brentLive?.as_of_date || snapshot.as_of_date;
   return [
     renderSnapshotMetricCard({
-      label: "隆众经营数据",
-      value: "待抓取",
-      unit: "",
-      sub: "产销率 / 库存 / 开工率",
-      meta: firstError ? String(firstError).slice(0, 80) : "等待日度任务或登录态刷新",
+      label: "\u5e03\u4f26\u7279",
+      value: formatNumber(brentValue),
+      unit: "\u7f8e\u5143/\u6876",
+      sub: `\u65e5\u671f ${formatDate(brentDate)}`,
+      meta: "\u539f\u6cb9\u7ed3\u7b97/\u5b9e\u65f6\u70b9\u4f4d",
+      live: true,
+      liveValue: true,
+      liveTime: true,
+      priceKey: "brent_active_settlement",
+      dateValue: brentDate,
+      timeValue: priceSnapshotTime("brent_active_settlement", snapshot),
+    }),
+    renderSnapshotMetricCard({
+      label: "\u5c71\u4e1c\u6c7d\u6cb9\u88c2\u89e3",
+      value: formatNumber(resolveGasolineCrackValue()),
+      unit: "\u5143/\u5428",
+      sub: "92#\u6c7d\u6cb9 - Brent\u6298\u7b97",
+      meta: "\u4f7f\u7528\u4e2d\u56fd\u8d27\u5e01\u7f51\u4e2d\u95f4\u4ef7",
+    }),
+    renderSnapshotMetricCard({
+      label: "\u5c71\u4e1c\u67f4\u6cb9\u88c2\u89e3",
+      value: formatNumber(resolveDieselCrackValue()),
+      unit: "\u5143/\u5428",
+      sub: "0#\u67f4\u6cb9 - Brent\u6298\u7b97",
+      meta: "\u4f7f\u7528\u4e2d\u56fd\u8d27\u5e01\u7f51\u4e2d\u95f4\u4ef7",
+    }),
+    renderSnapshotMetricCard({
+      label: "\u5c71\u4e1c\u5730\u70bc\u5f00\u5de5\u7387",
+      value: formatNumberTrim(capacity.capacity_utilization, 2),
+      unit: "%",
+      sub: `\u65e5\u671f ${oilchemMetricDate(capacity)}`,
+      meta: capacity.capacity_utilization_wow_pct != null
+        ? `\u73af\u6bd4 ${formatNumberTrim(capacity.capacity_utilization_wow_pct, 2)}%`
+        : "\u9686\u4f17\u5468\u5ea6",
+    }),
+    renderSnapshotMetricCard({
+      label: "\u5c71\u4e1c\u72ec\u7acb\u70bc\u5382\u6c7d\u6cb9\u4ea7\u9500\u7387",
+      value: formatNumberTrim(ratio.gasoline_ratio, 2),
+      unit: "%",
+      sub: `\u65e5\u671f ${oilchemMetricDate(ratio)}`,
+      meta: ratio.gasoline_change_pct != null ? `\u73af\u6bd4 ${formatNumberTrim(ratio.gasoline_change_pct, 2)}%` : "\u9686\u4f17\u65e5\u5ea6",
+    }),
+    renderSnapshotMetricCard({
+      label: "\u5c71\u4e1c\u72ec\u7acb\u70bc\u5382\u67f4\u6cb9\u4ea7\u9500\u7387",
+      value: formatNumberTrim(ratio.diesel_ratio, 2),
+      unit: "%",
+      sub: `\u65e5\u671f ${oilchemMetricDate(ratio)}`,
+      meta: ratio.diesel_change_pct != null ? `\u73af\u6bd4 ${formatNumberTrim(ratio.diesel_change_pct, 2)}%` : "\u9686\u4f17\u65e5\u5ea6",
     }),
   ];
-}
-
-async function loadBrentLive() {
-  if (!hasPermission("workbench.view")) return;
-  try {
-    const payload = await fetchJson("/api/v1/market/brent-live");
-    const previousPrices = state.marketSnapshot?.latest_prices || {};
-    state.brentLive = payload;
-    if (!state.marketSnapshot) {
-      state.marketSnapshot = {
-        as_of_date: payload.as_of_date,
-        generated_at: payload.generated_at,
-        latest_prices: {
-          brent_active_settlement: payload.latest_price,
-        },
-        metadata: payload.metadata || {},
-      };
-    } else {
-      state.marketSnapshot = {
-        ...state.marketSnapshot,
-        __previousPrices: previousPrices,
-        latest_prices: {
-          ...(state.marketSnapshot.latest_prices || {}),
-          brent_active_settlement: payload.latest_price,
-        },
-        metadata: {
-          ...(state.marketSnapshot.metadata || {}),
-          brent_live_mode: payload.metadata?.market_data_mode,
-          brent_live_reason: payload.metadata?.market_data_reason,
-        },
-      };
-    }
-    renderMarketSnapshot();
-  } catch (error) {
-    console.error(error);
-  }
-}
-
-function startBrentPolling() {
-  if (state.brentTimer) clearInterval(state.brentTimer);
-  state.brentTimer = setInterval(() => {
-    loadBrentLive();
-  }, 1000);
-}
-
-function startPolicyPolling() {
-  if (state.policyTimer) clearInterval(state.policyTimer);
-  state.policyTimer = setInterval(() => {
-    if (!hasPermission("policy.view") || state.policyManualDate) return;
-    loadPolicyFeed({ forceLatest: true });
-  }, 30000);
 }
 
 function renderMarketSnapshot() {
   const snapshot = state.marketSnapshot;
   if (!snapshot) {
-    dom.priceSnapshot.innerHTML = emptyState("价格快照加载中");
+    dom.priceSnapshot.innerHTML = emptyState("关键经营指标加载中");
     return;
   }
 
-  const previous = snapshot.__previousPrices || {};
-
-  const priceCards = PRICE_LABELS.filter(([key]) =>
-    ["brent_active_settlement", "sd_gas92_market", "cn_gas92_market"].includes(key)
-  ).map(([key, label], index) => {
-    const value = snapshot.latest_prices?.[key];
-    const changed = previous[key] != null && value != null && Number(previous[key]) !== Number(value);
-    const unit = key === "brent_active_settlement" ? "美元/桶" : "元/吨";
-    const reason =
-      key === "brent_active_settlement"
-        ? marketReasonLabel(state.brentLive?.metadata?.market_data_reason)
-        : marketReasonLabel(snapshot.metadata?.market_data_reason);
-    const quality = key === "brent_active_settlement"
-      ? state.brentLive?.metadata?.quality?.[key] || snapshot.metadata?.quality?.[key]
-      : snapshot.metadata?.quality?.[key];
-    const qualityText = quality
-      ? `${quality.source || "数据源"} / ${quality.quality_flag || "ok"} / ${quality.confidence || "中"}`
-      : reason;
-    const brentDetail = key === "brent_active_settlement" ? brentWindDetailText() : "";
-    return renderSnapshotMetricCard({
-      label,
-      value: formatNumber(value),
-      unit,
-      sub: `日期 ${formatDate(priceSnapshotDate(key, snapshot))}`,
-      meta: "",
-      featured: index === 0,
-      flash: changed,
-      live: key === "brent_active_settlement",
-      priceKey: key,
-      liveValue: key === "brent_active_settlement",
-      liveTime: key === "brent_active_settlement",
-      dateValue: priceSnapshotDate(key, snapshot),
-      timeValue: priceSnapshotTime(key, snapshot),
-    });
-  });
-
-  dom.priceSnapshot.innerHTML = [...priceCards, ...buildOilchemMetricCards(snapshot)].join("");
+  dom.priceSnapshot.innerHTML = buildOilchemMetricCards(snapshot).join("");
 
   syncLiveBrentNodes();
 }
@@ -4992,9 +5808,12 @@ function renderMorningBriefing() {
   const payload = state.latestBriefing;
   const sections = parseBriefingSections(payload.content_markdown);
   const outright = payload.outright_predictions || [];
+  const diesel0 = payload.diesel0_predictions || payload.metadata?.diesel0_predictions || [];
   const regional = payload.regional_spread_predictions || [];
   const lead = outright.find((item) => item.horizon === "D1") || outright[0] || null;
+  const dieselLead = diesel0.find((item) => item.horizon === "D1") || diesel0[0] || null;
   const leadBusiness = businessDirectionInfo(lead);
+  const dieselLeadBusiness = businessDirectionInfo(dieselLead);
   const snapshot = {
     ...(payload.metadata?.snapshot_prices || fallbackBriefingSnapshotPrices(sections)),
   };
@@ -5027,7 +5846,33 @@ function renderMorningBriefing() {
     ["山东 92#", snapshot.sd_gas92_market ?? lead?.raw_context?.current_price, "元/吨", false, briefingPriceDate, briefingPriceTime],
     ["全国 92#", snapshot.cn_gas92_market, "元/吨", false, briefingPriceDate, briefingPriceTime],
     ["华东 92#", snapshot.east_china_gas92_market, "元/吨", false, briefingPriceDate, briefingPriceTime],
+    ["山东 0#柴油", snapshot.sd_diesel0_market ?? dieselLead?.raw_context?.current_price, "元/吨", false, briefingPriceDate, briefingPriceTime],
+    ["全国 0#柴油", snapshot.cn_diesel0_market, "元/吨", false, briefingPriceDate, briefingPriceTime],
+    ["华东 0#柴油", snapshot.east_china_diesel0_market, "元/吨", false, briefingPriceDate, briefingPriceTime],
   ].filter(([, value]) => value != null);
+  const renderBriefingHorizonSection = (items, productLabel, leadInfo) => items.length
+    ? `<section class="briefing-block briefing-block--wide briefing-block--horizons">
+        <div class="briefing-block-head">
+          <h4>${escapeHtml(productLabel)}多周期判断</h4>
+          <span>${escapeHtml(leadInfo?.label || "D1与上方主卡为同一预测")}</span>
+        </div>
+        <div class="briefing-horizon-grid">
+          ${items
+            .map(
+              (item) => `
+                <article class="briefing-horizon-card">
+                  <div class="briefing-horizon-top">
+                    <span>${escapeHtml(item.horizon)} / ${escapeHtml(HORIZON_LABELS[item.horizon] || item.horizon)}</span>
+                    <em class="${toneClass(businessDirectionInfo(item).tone)}">${escapeHtml(businessDirectionInfo(item).label)}</em>
+                  </div>
+                  <strong>${formatNumber(item.point_value)}</strong>
+                  <small>区间 ${formatNumber(item.range_lower)} ~ ${formatNumber(item.range_upper)}</small>
+                </article>`
+            )
+            .join("")}
+        </div>
+      </section>`
+    : "";
   const mixedHighlights = [
     ...policyHighlights.map((item) => ({
       type: "政策",
@@ -5067,6 +5912,11 @@ function renderMorningBriefing() {
             <span>主判断</span>
             <strong>${escapeHtml(leadBusiness.label)}</strong>
             <small>${escapeHtml(windowText)}</small>
+          </article>
+          <article class="briefing-side-card">
+            <span>0#柴油判断</span>
+            <strong>${escapeHtml(dieselLead ? dieselLeadBusiness.label : "暂无预测")}</strong>
+            <small>${dieselLead ? `${formatNumber(dieselLead.point_value)} 元/吨` : "检查柴油数据链路"}</small>
           </article>
           <article class="briefing-side-card">
             <span>资讯与事件</span>
@@ -5116,27 +5966,8 @@ function renderMorningBriefing() {
             : ""
         }
 
-        <section class="briefing-block briefing-block--wide briefing-block--horizons">
-          <div class="briefing-block-head">
-            <h4>多周期判断</h4>
-            <span>D1与上方主卡为同一预测</span>
-          </div>
-          <div class="briefing-horizon-grid">
-            ${outright
-              .map(
-                (item) => `
-                  <article class="briefing-horizon-card">
-                    <div class="briefing-horizon-top">
-                      <span>${escapeHtml(item.horizon)} / ${escapeHtml(HORIZON_LABELS[item.horizon] || item.horizon)}</span>
-                      <em class="${toneClass(businessDirectionInfo(item).tone)}">${escapeHtml(businessDirectionInfo(item).label)}</em>
-                    </div>
-                    <strong>${formatNumber(item.point_value)}</strong>
-                    <small>区间 ${formatNumber(item.range_lower)} ~ ${formatNumber(item.range_upper)}</small>
-                  </article>`
-              )
-              .join("")}
-          </div>
-        </section>
+        ${renderBriefingHorizonSection(outright, "92#汽油", leadBusiness)}
+        ${renderBriefingHorizonSection(diesel0, "0#柴油", dieselLeadBusiness)}
 
         <section class="briefing-block briefing-block--advice">
           <div class="briefing-block-head">
@@ -5204,6 +6035,7 @@ function renderMorningBriefing() {
                         </div>
                         <div class="regional-variant-list">${renderRegionalVariantRows(item, { compact: true })}</div>
                         <small>真实价差 ${formatNumber(actualSpread)}</small>
+                        <button class="spread-detail-button" type="button" ${regionalDetailButtonAttrs(item, selectedRegionalPredictions().indexOf(item))}>详情</button>
                       </article>`;
                   })
                   .join("")
@@ -5240,6 +6072,7 @@ function toggleBriefingCollapsed() {
 }
 
 function startBriefingCollapseTimer() {
+  if (!BRIEFING_FEATURE_ENABLED) return;
   if (state.briefingCollapseTimer) clearInterval(state.briefingCollapseTimer);
   state.briefingCollapseTimer = setInterval(() => {
     applyBriefingCollapseState();
@@ -5296,6 +6129,17 @@ function bindEvents() {
     await loadPriceHistory();
   });
 
+  dom.productSwitches?.forEach((switchNode) => switchNode.addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    event.preventDefault();
+    const currentIndex = PRODUCT_ORDER.indexOf(state.selectedProduct);
+    const offset = event.key === "ArrowRight" ? 1 : -1;
+    const nextProduct = PRODUCT_ORDER[(currentIndex + offset + PRODUCT_ORDER.length) % PRODUCT_ORDER.length];
+    const button = switchNode.querySelector(`[data-product="${nextProduct}"]`);
+    button?.click();
+    button?.focus();
+  }));
+
   dom.oilchemInventoryRefresh?.addEventListener("click", loadOilchemInventory);
   dom.oilchemInventoryExport?.addEventListener("click", exportOilchemInventory);
 
@@ -5329,10 +6173,23 @@ function bindEvents() {
   });
 
 
-  dom.spreadGrid?.addEventListener("click", (event) => {
+  document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-spread-detail-index]");
     if (!button) return;
-    showSpreadDetail(button.dataset.spreadDetailIndex);
+    event.preventDefault();
+    const nextHorizon = button.dataset.spreadHorizon || state.selectedRegionalHorizon;
+    if (nextHorizon && nextHorizon !== state.selectedRegionalHorizon) state.selectedRegionalHorizon = nextHorizon;
+    showSpreadDetail({ index: button.dataset.spreadDetailIndex, regionCode: button.dataset.spreadRegion, horizon: state.selectedRegionalHorizon });
+  });
+
+  dom.spreadHorizonSwitch?.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-spread-horizon]");
+    if (!button) return;
+    state.selectedRegionalHorizon = button.dataset.spreadHorizon;
+    refreshFreightDependentViews();
+    if (dom.spreadDetailDialog?.open) {
+      closeSpreadDetail();
+    }
   });
 
   dom.spreadDetailClose?.addEventListener("click", closeSpreadDetail);
@@ -5387,8 +6244,10 @@ function bindEvents() {
     renderChatHistory();
   });
 
-  dom.briefingToggle?.addEventListener("click", toggleBriefingCollapsed);
-  dom.briefingGenerate.addEventListener("click", generateBriefing);
+  if (BRIEFING_FEATURE_ENABLED) {
+    dom.briefingToggle?.addEventListener("click", toggleBriefingCollapsed);
+    dom.briefingGenerate?.addEventListener("click", generateBriefing);
+  }
 
   dom.newsDateSelect.addEventListener("change", () => {
     state.policyManualDate = true;
@@ -5441,8 +6300,10 @@ async function init() {
   renderChatHistory();
   renderMarketSnapshot();
   renderResearch();
-  renderMorningBriefing();
-  startBriefingCollapseTimer();
+  if (BRIEFING_FEATURE_ENABLED) {
+    renderMorningBriefing();
+    startBriefingCollapseTimer();
+  }
   renderAlerts();
   renderPriceHistory();
   ensureOilchemInventoryDateInputs();
@@ -5460,24 +6321,32 @@ async function init() {
   }
 
   const initialTasks = [];
+  if (accessibleView !== "agents" && hasPermission("workbench.view")) {
+    const dashboardFallbackTimer = window.setTimeout(() => {
+      if (!state.dashboard && dom.outrightPanel) {
+        dom.outrightPanel.innerHTML = emptyState("\u6700\u8fd1\u7814\u7a76\u7ed3\u8bba\u8fd8\u672a\u8fd4\u56de\uff0c\u53ef\u70b9\u51fb\u5237\u65b0\u7814\u7a76\u7ed3\u8bba\u91cd\u65b0\u751f\u6210");
+        if (dom.spreadGrid) dom.spreadGrid.innerHTML = emptyState("\u533a\u57df\u4ef7\u5dee\u5f85\u52a0\u8f7d");
+        setGlobalStatus("\u6700\u8fd1\u9884\u6d4b\u52a0\u8f7d\u8d85\u65f6\uff0c\u5176\u4ed6\u6a21\u5757\u5df2\u7ee7\u7eed\u52a0\u8f7d", "error");
+      }
+    }, 20000);
+    initialTasks.push(loadLatestDashboard().finally(() => window.clearTimeout(dashboardFallbackTimer)));
+  }
+
   if (hasPermission("workbench.view")) {
     initialTasks.push(
       loadMarketSnapshot(),
       loadBrentLive(),
-      loadLatestBriefing(),
       loadPriceHistory(),
       loadOilchemInventory(),
       loadPredictionAccuracy(),
       loadFreightSettings(),
     );
+    if (BRIEFING_FEATURE_ENABLED) initialTasks.push(loadLatestBriefing());
   }
   if (hasPermission("policy.view")) {
     initialTasks.push(loadPolicyFeed());
   }
-  await Promise.allSettled(initialTasks);
-  if (accessibleView !== "agents" && hasPermission("workbench.view")) {
-    await loadLatestDashboard();
-  }
+  Promise.allSettled(initialTasks).catch((error) => console.error(error));
 }
 
 init();

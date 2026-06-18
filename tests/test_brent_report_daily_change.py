@@ -44,7 +44,7 @@ def test_scorecard_d1_uses_forecast_point_minus_report_settlement_first():
     }
 
 
-def test_scorecard_d1_ignores_realtime_daily_change_without_point_and_settlement():
+def test_scorecard_d1_requires_point_and_settlement_without_realtime_fallback():
     engine = ScorecardEngine("unused.yaml")
 
     result = engine._resolve_brent_forecast_change(
@@ -63,9 +63,9 @@ def test_scorecard_d1_ignores_realtime_daily_change_without_point_and_settlement
     )
 
     assert result == {
-        "value": -1.23,
+        "value": None,
         "source": "brent_daily_report",
-        "note": "settlement_change_vs_previous_settlement",
+        "note": "missing_daily_point_or_settlement",
     }
 
 
@@ -212,7 +212,8 @@ def test_scorecard_brent_change_does_not_fallback_to_feature_frame_zero():
     )
 
     assert result["value"] is None
-    assert result["source"] == "feature_frame"
+    assert result["source"] == "brent_daily_report"
+    assert result["note"] == "missing_daily_point_or_settlement"
 
 
 def test_current_vertical_daily_report_does_not_treat_point_as_settlement_change():

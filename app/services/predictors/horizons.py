@@ -28,7 +28,8 @@ HORIZON_CONFIGS: dict[str, HorizonConfig] = {
 }
 
 
-DEFAULT_HORIZONS = ["D1", "D3", "W1", "M1"]
+DEFAULT_HORIZONS = ["D1", "W1", "M1"]
+ACTIVE_HORIZONS = set(DEFAULT_HORIZONS)
 
 
 def resolve_horizon_config(horizon: str) -> HorizonConfig:

@@ -20,7 +20,7 @@ if (-not (Test-Path -LiteralPath $RefreshScript)) {
 }
 
 if (-not $ExcelPath) {
-    $ExcelPath = Join-Path $Root "????????.xlsx"
+    $ExcelPath = Join-Path $Root "模型预测基础数据.xlsx"
 }
 
 $ArgumentParts = @(
