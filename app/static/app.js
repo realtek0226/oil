@@ -390,12 +390,6 @@ const dom = {
   agentGraphNodes: document.getElementById("agent-graph-nodes"),
   scopeControls: document.getElementById("scope-controls"),
   optimizationScopeControls: document.getElementById("optimization-scope-controls"),
-  runList: document.getElementById("run-list"),
-  runDetailMeta: document.getElementById("run-detail-meta"),
-  runDetail: document.getElementById("run-detail"),
-  agentHistoryMeta: document.getElementById("agent-history-meta"),
-  agentHistoryTabs: document.getElementById("agent-history-tabs"),
-  agentHistoryList: document.getElementById("agent-history-list"),
   proposalGenerate: document.getElementById("proposal-generate"),
   proposalApprove: document.getElementById("proposal-approve"),
   proposalReject: document.getElementById("proposal-reject"),
@@ -485,11 +479,6 @@ const state = {
   policySortMode: "importance",
   agentOverview: null,
   agentGraph: null,
-  agentRuns: [],
-  selectedRunId: null,
-  selectedRunDetail: null,
-  selectedTraceAgent: null,
-  agentHistory: null,
   optimizationState: null,
   theme: "light",
   brentLive: null,
@@ -4682,25 +4671,71 @@ function renderAgentGraph() {
     return;
   }
 
-  const nodeMap = {};
-  payload.nodes.forEach((node) => {
-    nodeMap[node.id] = node;
-  });
+  const nodes = payload.nodes || [];
+  const byId = Object.fromEntries(nodes.map((node) => [node.id, node]));
+  const columns = [
+    {
+      key: "chief",
+      title: "总控",
+      note: "拆解任务并统一口径",
+      nodes: [byId.chief_orchestrator].filter(Boolean),
+    },
+    {
+      key: "subagent",
+      title: "规则与数据",
+      note: "原油、库存、需求、政策、事件等子智能体",
+      nodes: nodes.filter((node) => node.layer === "subagent"),
+    },
+    {
+      key: "forecast",
+      title: "预测引擎",
+      note: "汇总权重并生成点位、区间与方向",
+      nodes: [byId.forecast_hub].filter(Boolean),
+    },
+    {
+      key: "llm_agent",
+      title: "复核与归因",
+      note: "解释事件传导，检查冲突和人工复核项",
+      nodes: nodes.filter((node) => node.layer === "llm_agent"),
+    },
+    {
+      key: "output",
+      title: "研究输出",
+      note: "首页结论、对话预测和外部输出",
+      nodes: [byId.research_output].filter(Boolean),
+    },
+  ].filter((column) => column.nodes.length);
 
-  dom.agentGraphSvg.innerHTML = payload.edges.map((edge) => {
-    const source = nodeMap[edge.source];
-    const target = nodeMap[edge.target];
-    if (!source || !target) return "";
-    return `<line class="graph-edge" x1="${source.x * 1000}" y1="${source.y * 620}" x2="${target.x * 1000}" y2="${target.y * 620}" />`;
-  }).join("");
-
-  dom.agentGraphNodes.innerHTML = payload.nodes.map((node) => {
-    return `
-      <div class="graph-node ${statusClass(node.status)}" style="left:${node.x * 100}%; top:${node.y * 100}%;">
-        <div class="graph-node-label">${escapeHtml(node.label)}</div>
-        <div class="graph-node-role">${escapeHtml(node.role)}</div>
-      </div>`;
-  }).join("");
+  dom.agentGraphSvg.innerHTML = "";
+  dom.agentGraphNodes.innerHTML = `
+    <div class="graph-flow" style="--graph-columns:${columns.length};">
+      ${columns.map((column, index) => {
+        return `
+          <section class="graph-lane graph-lane-${escapeHtml(column.key)}">
+            <div class="graph-lane-head">
+              <span class="graph-lane-index">${index + 1}</span>
+              <div>
+                <div class="graph-lane-title">${escapeHtml(column.title)}</div>
+                <div class="graph-lane-note">${escapeHtml(column.note)}</div>
+              </div>
+            </div>
+            <div class="graph-lane-body">
+              ${column.nodes.map((node) => {
+                const optimizable = node.metadata?.optimizable ? "可调权重" : "固定节点";
+                return `
+                  <article class="graph-node graph-node-${escapeHtml(node.layer)} ${statusClass(node.status)}">
+                    <div class="graph-node-top">
+                      <div class="graph-node-label">${escapeHtml(node.label)}</div>
+                      <span class="status-badge ${statusClass(node.status)}">${escapeHtml(statusText(node.status))}</span>
+                    </div>
+                    <div class="graph-node-role">${escapeHtml(node.role)}</div>
+                    <div class="graph-node-meta">${escapeHtml(optimizable)}</div>
+                  </article>`;
+              }).join("")}
+            </div>
+          </section>`;
+      }).join("")}
+    </div>`;
 }
 
 function renderScopeBlocks(target, scopes) {
@@ -4730,141 +4765,6 @@ function renderScopeBlocks(target, scopes) {
           }).join("")}
         </div>
       </section>`;
-  }).join("");
-}
-
-function renderRunStrip() {
-  const items = state.agentRuns || [];
-  if (!items.length) {
-    dom.runList.innerHTML = emptyState("暂无运行记录");
-    return;
-  }
-
-  dom.runList.innerHTML = items.map((item) => {
-    const active = item.run_id === state.selectedRunId ? " is-active" : "";
-    return `
-      <button class="run-card${active}" type="button" data-run-id="${escapeHtml(item.run_id)}">
-        <div class="run-card-head">
-          <div>${escapeHtml(item.title)}</div>
-          <div class="run-meta">${escapeHtml(item.horizon)}</div>
-        </div>
-        <div class="run-card-body">
-          <span>${escapeHtml(directionLabel(item.direction_label, item.run_type === "regional_spread"))}</span>
-          <span>${formatNumber(item.point_value)}</span>
-          <span>${escapeHtml(formatDateTime(item.created_at))}</span>
-        </div>
-      </button>`;
-  }).join("");
-
-  dom.runList.querySelectorAll("[data-run-id]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      await loadRunDetail(button.dataset.runId);
-    });
-  });
-}
-
-function renderTraceTabs() {
-  const outputs = state.selectedRunDetail?.agent_outputs || [];
-  if (!outputs.length) {
-    dom.agentHistoryTabs.innerHTML = "";
-    return;
-  }
-  if (!state.selectedTraceAgent || !outputs.some((item) => item.agent_name === state.selectedTraceAgent)) {
-    state.selectedTraceAgent = outputs[0].agent_name;
-  }
-
-  dom.agentHistoryTabs.innerHTML = outputs.map((item) => {
-    const active = item.agent_name === state.selectedTraceAgent ? " is-active" : "";
-    return `<button class="trace-tab${active}" type="button" data-agent-name="${escapeHtml(item.agent_name)}">${escapeHtml(item.label)}</button>`;
-  }).join("");
-
-  dom.agentHistoryTabs.querySelectorAll("[data-agent-name]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      state.selectedTraceAgent = button.dataset.agentName;
-      renderTraceTabs();
-      await loadAgentHistory(state.selectedTraceAgent);
-    });
-  });
-}
-
-function renderRunDetail() {
-  const detail = state.selectedRunDetail;
-  if (!detail) {
-    dom.runDetail.innerHTML = emptyState("请选择一条运行记录");
-    dom.runDetailMeta.textContent = "未选择运行";
-    return;
-  }
-
-  const outputs = detail.agent_outputs || [];
-  const outputCards = outputs.map((output) => {
-    return `
-      <article class="agent-output-card">
-        <div class="output-head">
-          <div>
-            <div class="output-name">${escapeHtml(output.label)}</div>
-            <div class="output-role">${escapeHtml(output.role)}</div>
-          </div>
-          <span class="tag ${output.enabled ? "" : "tag-muted"}">${output.enabled ? "启用" : "停用"}</span>
-        </div>
-        <div class="output-metrics">
-          权重 ${output.weight == null ? "-" : formatNumber(output.weight, 2)}
-          · 原始分 ${output.raw_score == null ? "-" : formatNumber(output.raw_score, 2)}
-          · 贡献 ${output.contribution == null ? "-" : formatNumber(output.contribution, 2)}
-        </div>
-        <div>${escapeHtml(output.summary || "")}</div>
-        <div class="driver-list">${(output.evidence || []).slice(0, 3).map((item) => `<div class="driver-item">${escapeHtml(item)}</div>`).join("")}</div>
-      </article>`;
-  }).join("");
-
-  dom.runDetailMeta.textContent = `${detail.run.title} / ${detail.run.horizon} / ${formatDateTime(detail.run.created_at)}`;
-  dom.runDetail.innerHTML = `
-    <section class="detail-panel">
-      <div class="detail-hero">
-        <div class="detail-title ${toneClass(detail.run.direction_label)}">${escapeHtml(directionLabel(detail.run.direction_label, detail.run.run_type === "regional_spread"))}</div>
-        <div class="detail-point ${toneClass(detail.run.direction_label)}">${formatNumber(detail.run.point_value)}</div>
-        <div class="detail-range">区间 ${formatNumber(detail.run.range_lower)} ~ ${formatNumber(detail.run.range_upper)} 元/吨</div>
-        <div class="body-text">${renderMultilineText(detail.explanation)}</div>
-      </div>
-
-      <div class="detail-grid">
-        ${renderPredictionNarrativeSplit({
-          driver_summary: detail.driver_summary,
-          operating_advice: detail.operating_advice,
-          raw_context: detail.raw_context || detail.run?.raw_context || {},
-        })}
-      </div>
-
-      <article class="info-card">
-        <h3>单体输出</h3>
-        <div class="detail-grid">${outputCards || emptyState("暂无单体输出")}</div>
-      </article>
-    </section>`;
-}
-
-function renderAgentHistory() {
-  renderTraceTabs();
-  const payload = state.agentHistory;
-  if (!payload?.items?.length) {
-    dom.agentHistoryList.innerHTML = emptyState("暂无该智能体历史输出");
-    setChip(dom.agentHistoryMeta, "暂无历史");
-    return;
-  }
-
-  setChip(dom.agentHistoryMeta, `${payload.label} / 最近 ${payload.items.length} 次`);
-  dom.agentHistoryList.innerHTML = payload.items.map((item) => {
-    return `
-      <article class="history-card">
-        <div class="history-head">
-          <div>${escapeHtml(item.run.title)}</div>
-          <div class="run-meta">${escapeHtml(formatDateTime(item.run.created_at))}</div>
-        </div>
-        <div>${escapeHtml(item.output.summary || "")}</div>
-        <div class="feed-meta">
-          <span>${escapeHtml(directionLabel(item.output.direction, item.run.run_type === "regional_spread"))}</span>
-          <span>贡献 ${formatNumber(item.output.contribution)}</span>
-          <span>${escapeHtml(confidenceText(item.output.confidence_label, item.output.confidence_score))}</span>
-        </div>
-      </article>`;
   }).join("");
 }
 
@@ -4922,6 +4822,26 @@ function renderProposalPanel() {
 
   const cards = (proposal.suggestions || []).length
     ? proposal.suggestions.map((item) => {
+        const currentWeight = Number(item.current_weight);
+        const proposedWeight = Number(item.proposed_weight);
+        const delta = proposedWeight - currentWeight;
+        const hasWeightDelta = Number.isFinite(delta);
+        const enableChanged = item.current_enabled !== item.proposed_enabled;
+        const actionLabel = enableChanged
+          ? item.proposed_enabled ? "启用" : "停用"
+          : !hasWeightDelta || Math.abs(delta) < 0.005
+            ? "保持"
+            : delta > 0
+              ? "上调"
+              : "下调";
+        const actionTone = enableChanged
+          ? item.proposed_enabled ? "is-up" : "is-down"
+          : !hasWeightDelta || Math.abs(delta) < 0.005
+            ? "is-flat"
+            : delta > 0
+              ? "is-up"
+              : "is-down";
+        const deltaText = hasWeightDelta && Math.abs(delta) >= 0.005 ? `${delta > 0 ? "+" : ""}${formatNumber(delta, 2)}` : "";
         return `
           <article class="proposal-card">
             <div class="proposal-row">
@@ -4929,9 +4849,14 @@ function renderProposalPanel() {
                 <div class="proposal-name">${escapeHtml(item.label)}</div>
                 <div class="feed-meta">${escapeHtml(item.scope_label)}</div>
               </div>
-              <span class="tag">${formatNumber(item.current_weight, 2)} → ${formatNumber(item.proposed_weight, 2)}</span>
+              <span class="proposal-action ${actionTone}">${escapeHtml(actionLabel)}${deltaText ? ` ${escapeHtml(deltaText)}` : ""}</span>
             </div>
             <div>${escapeHtml(item.reason || "")}</div>
+            <div class="proposal-weight-row">
+              <span><strong>当前权重</strong>${formatNumber(item.current_weight, 2)}</span>
+              <span><strong>建议权重</strong>${formatNumber(item.proposed_weight, 2)}</span>
+              <span><strong>启停</strong>${item.current_enabled ? "启用" : "停用"} → ${item.proposed_enabled ? "启用" : "停用"}</span>
+            </div>
             <div class="feed-meta">
               <span>样本 ${item.metrics?.run_count ?? "-"}</span>
               <span>平均贡献 ${item.metrics?.avg_abs_contribution == null ? "-" : formatNumber(item.metrics.avg_abs_contribution, 2)}</span>
@@ -5399,77 +5324,28 @@ async function sendChatPrediction(prefill = "") {
   }
 }
 
-async function loadAgentHistory(agentName) {
-  if (!hasPermission("agents.view")) return;
-  try {
-    state.agentHistory = await fetchJson(`/api/v1/agents/${encodeURIComponent(agentName)}/outputs?limit=10`);
-    renderAgentHistory();
-  } catch (error) {
-    console.error(error);
-    dom.agentHistoryList.innerHTML = emptyState(`单体轨迹加载失败：${error.message || error}`);
-    setChip(dom.agentHistoryMeta, "轨迹加载失败", "error");
-  }
-}
-
-async function loadRunDetail(runId) {
-  if (!hasPermission("agents.view")) return;
-  try {
-    state.selectedRunId = runId;
-    renderRunStrip();
-    state.selectedRunDetail = await fetchJson(`/api/v1/agents/runs/${encodeURIComponent(runId)}`);
-    const outputs = state.selectedRunDetail.agent_outputs || [];
-    if (!state.selectedTraceAgent || !outputs.some((item) => item.agent_name === state.selectedTraceAgent)) {
-      state.selectedTraceAgent = outputs[0]?.agent_name || null;
-    }
-    renderRunDetail();
-    if (state.selectedTraceAgent) {
-      await loadAgentHistory(state.selectedTraceAgent);
-    } else {
-      dom.agentHistoryList.innerHTML = emptyState("该运行没有单体输出");
-    }
-  } catch (error) {
-    console.error(error);
-    dom.runDetail.innerHTML = emptyState(`运行详情加载失败：${error.message || error}`);
-  }
-}
-
 async function loadAgentWorkspace() {
   if (!hasPermission("agents.view")) return;
   setGlobalStatus("智能体管理加载中", "loading");
   setChip(dom.agentStatusChip, "加载中", "loading");
   dom.agentRefresh.disabled = true;
   try {
-    const [overview, graph, runs, optimization] = await Promise.all([
+    const [overview, graph, optimization] = await Promise.all([
       fetchJson("/api/v1/agents/overview"),
       fetchJson("/api/v1/agents/graph"),
-      fetchJson("/api/v1/agents/runs?limit=24"),
       fetchJson("/api/v1/agents/optimization/state"),
     ]);
     state.agentOverview = overview;
     state.agentGraph = graph;
-    state.agentRuns = runs.items || [];
     state.optimizationState = optimization;
 
     renderAgentOverview();
     renderAgentGraph();
     renderScopeBlocks(dom.scopeControls, optimization.scopes);
     renderScopeBlocks(dom.optimizationScopeControls, optimization.scopes);
-    renderRunStrip();
     renderProposalPanel();
 
-    const keepSelection = state.agentRuns.some((item) => item.run_id === state.selectedRunId);
-    if (state.agentRuns.length) {
-      await loadRunDetail(keepSelection ? state.selectedRunId : state.agentRuns[0].run_id);
-    } else {
-      state.selectedRunDetail = null;
-      state.agentHistory = null;
-      dom.agentHistoryTabs.innerHTML = "";
-      renderRunDetail();
-      setChip(dom.agentHistoryMeta, "暂无轨迹");
-      dom.agentHistoryList.innerHTML = emptyState("暂无历史输出");
-    }
-
-    setChip(dom.agentStatusChip, `已更新 / ${state.agentRuns.length} 条运行`);
+    setChip(dom.agentStatusChip, `已更新 / 近 ${overview.recent_run_count ?? 0} 次样本`);
     setGlobalStatus("智能体管理已更新");
   } catch (error) {
     console.error(error);
@@ -5477,8 +5353,6 @@ async function loadAgentWorkspace() {
     dom.agentGraphNodes.innerHTML = emptyState("关系图加载失败");
     dom.scopeControls.innerHTML = emptyState("权重与启停加载失败");
     dom.optimizationScopeControls.innerHTML = emptyState("权重与启停加载失败");
-    dom.runList.innerHTML = emptyState("运行记录加载失败");
-    dom.runDetail.innerHTML = emptyState("运行详情加载失败");
     dom.proposalPanel.innerHTML = emptyState("自优化提案加载失败");
     setChip(dom.agentStatusChip, "加载失败", "error");
     setGlobalStatus("智能体管理加载失败", "error");

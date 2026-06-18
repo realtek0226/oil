@@ -5151,24 +5151,29 @@ body[data-theme="dark"] .freight-control--compact {
 
 .graph-stage {
   position: relative;
-  min-height: 620px;
+  min-height: 0;
   border-radius: var(--radius-sm);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid rgba(255, 255, 255, 0.05);
   background:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(243, 163, 71, 0.05), rgba(88, 208, 188, 0.04)),
+    linear-gradient(90deg, rgba(243, 163, 71, 0.08), transparent 24%, transparent 76%, rgba(88, 208, 188, 0.07)),
     rgba(255, 255, 255, 0.02);
-  background-size: 40px 40px, 40px 40px, auto, auto;
+  scrollbar-width: thin;
 }
 
 .graph-svg,
 .graph-nodes {
-  position: absolute;
-  inset: 0;
   width: 100%;
-  height: 100%;
+}
+
+.graph-svg {
+  display: none;
+}
+
+.graph-nodes {
+  position: relative;
+  padding: 14px;
 }
 
 .graph-edge {
@@ -5176,20 +5181,137 @@ body[data-theme="dark"] .freight-control--compact {
   stroke-width: 2;
 }
 
-.graph-node {
+.graph-flow {
+  --graph-columns: 5;
+  display: grid;
+  grid-template-columns: repeat(var(--graph-columns), minmax(172px, 1fr));
+  gap: 12px;
+  min-width: 980px;
+}
+
+.graph-lane {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 12px;
+}
+
+.graph-lane:not(:last-child)::after {
+  content: "";
   position: absolute;
-  width: 170px;
-  transform: translate(-50%, -50%);
-  padding: 12px 14px;
+  top: 25px;
+  right: -10px;
+  width: 16px;
+  height: 16px;
+  border-top: 2px solid rgba(116, 186, 246, 0.34);
+  border-right: 2px solid rgba(116, 186, 246, 0.34);
+  transform: rotate(45deg);
+}
+
+.graph-lane-head {
+  min-height: 72px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.graph-lane-index {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(116, 186, 246, 0.16);
+  color: var(--accent-2);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.graph-lane-title {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.graph-lane-note {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.graph-lane-body {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.graph-node {
+  position: relative;
+  min-height: 108px;
+  padding: 12px;
   border-radius: var(--radius-sm);
   background: rgba(11, 15, 21, 0.94);
   border: 1px solid var(--line-strong);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+  display: grid;
+  gap: 8px;
+}
+
+.graph-node::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  background: rgba(116, 186, 246, 0.46);
+}
+
+.graph-node.status-attention::before {
+  background: rgba(243, 163, 71, 0.72);
+}
+
+.graph-node.status-disabled::before {
+  background: rgba(240, 123, 127, 0.72);
+}
+
+.graph-node-top {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
 }
 
 .graph-node-label {
   font-size: var(--text-sm);
-  font-weight: 600;
+  line-height: 1.35;
+  font-weight: 700;
+  color: rgba(248, 250, 252, 0.96);
+}
+
+.graph-node-role,
+.graph-node-meta {
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: rgba(203, 213, 225, 0.82);
+}
+
+.graph-node-meta {
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.graph-node .status-badge {
+  color: #8ee6bd;
+  background: rgba(45, 212, 143, 0.14);
+  border-color: rgba(45, 212, 143, 0.22);
 }
 
 .scope-controls {
@@ -5390,6 +5512,60 @@ body[data-theme="dark"] .freight-control--compact {
 .proposal-card {
   display: grid;
   gap: 10px;
+}
+
+.proposal-action {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.proposal-action.is-up {
+  color: var(--up);
+  border-color: color-mix(in srgb, var(--up) 34%, transparent);
+  background: color-mix(in srgb, var(--up) 10%, transparent);
+}
+
+.proposal-action.is-down {
+  color: var(--down);
+  border-color: color-mix(in srgb, var(--down) 34%, transparent);
+  background: color-mix(in srgb, var(--down) 10%, transparent);
+}
+
+.proposal-action.is-flat {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.proposal-weight-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.proposal-weight-row span {
+  min-height: 48px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--ink);
+  font-size: var(--text-sm);
+}
+
+.proposal-weight-row strong {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  font-weight: 500;
 }
 
 .empty-state {
@@ -5728,6 +5904,7 @@ body[data-theme="dark"] .freight-control--compact {
   .accuracy-summary-grid,
   .clearview-top,
   .proposal-grid,
+  .proposal-weight-row,
   .detail-grid,
   .hero-columns,
   .profile-summary-grid,

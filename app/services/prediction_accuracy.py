@@ -13,6 +13,7 @@ from app.services.run_repository import FileRunRepository
 
 
 DELETED_ACCURACY_RECORDS_PATH = Path("artifacts/agent_control/prediction_accuracy_deleted.json")
+ACCURACY_BASELINE_PATH = Path("artifacts/agent_control/prediction_accuracy_baseline.json")
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,9 @@ class PredictionAccuracyService:
         if not rows:
             rows = self._load_prediction_rows(cutoff=cutoff, limit=limit)
         rows.extend(self._load_roundtable_rows(cutoff=cutoff))
+        baseline_start_date = self._load_baseline_start_date()
+        if baseline_start_date is not None:
+            rows = [row for row in rows if row.as_of_date >= baseline_start_date]
         deleted_run_ids = self._load_deleted_run_ids()
         rows = [row for row in rows if row.run_id not in deleted_run_ids]
         rows = self._dedupe_rows(rows)
@@ -120,6 +124,7 @@ class PredictionAccuracyService:
             "metadata": {
                 "days": days,
                 "limit": limit,
+                "baseline_start_date": baseline_start_date.isoformat() if baseline_start_date else None,
                 "actual_price_field": "sd_gas92_market",
                 "actual_scope": "山东92#国VI库提现汇市场价",
                 "evaluation_rule": "真实价格按山东92#国VI库提现汇市场价日期列对齐；目标日期无价格时仅展示为待验证。",
@@ -436,6 +441,12 @@ class PredictionAccuracyService:
         if not isinstance(items, list):
             return set()
         return {str(item) for item in items if item}
+
+    def _load_baseline_start_date(self) -> date | None:
+        payload = self._read_json(ACCURACY_BASELINE_PATH) or {}
+        if not isinstance(payload, dict):
+            return None
+        return self._parse_date(payload.get("start_date"))
 
     def _parse_date(self, value: Any) -> date | None:
         if isinstance(value, date) and not isinstance(value, datetime):
