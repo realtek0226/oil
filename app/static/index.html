@@ -51,12 +51,7 @@
           </div>
         </div>
 
-        <div class="workspace-bar">
-          <div id="agents-subnav" class="sub-nav" aria-label="智能体二级导航" hidden>
-            <button class="sub-tab is-active" type="button" data-agent-subview="overview">运行总览</button>
-            <button class="sub-tab" type="button" data-agent-subview="optimization">自优化</button>
-          </div>
-        </div>
+        <div class="workspace-bar"></div>
       </header>
 
       <main id="main" class="view-stack">
@@ -372,7 +367,7 @@
         </section>
 
         <section id="view-agents" class="view" data-view="agents">
-          <section id="agent-subview-overview" class="agent-subview is-active" data-agent-subview="overview">
+          <section class="agent-workspace">
             <section class="panel">
               <div class="panel-head">
                 <div>
@@ -387,61 +382,34 @@
               <div id="agent-overview-grid" class="agent-overview-grid"></div>
             </section>
 
-            <div class="agent-main-grid">
-              <section class="panel">
-                <div class="panel-head compact">
-                  <div>
-                    <h2>关系图</h2>
-                    <p class="panel-copy">展示总控、子智能体、预测引擎和研究输出之间的联动。</p>
-                  </div>
+            <section class="panel agent-graph-panel">
+              <div class="panel-head compact">
+                <div>
+                  <h2>关系图</h2>
+                  <p class="panel-copy">展示总控、子智能体、预测引擎和研究输出之间的联动。</p>
                 </div>
-                <div id="agent-graph-stage" class="graph-stage">
-                  <svg id="agent-graph-svg" class="graph-svg" viewBox="0 0 1000 620" aria-hidden="true"></svg>
-                  <div id="agent-graph-nodes" class="graph-nodes"></div>
-                </div>
-              </section>
+              </div>
+              <div id="agent-graph-stage" class="graph-stage">
+                <svg id="agent-graph-svg" class="graph-svg" viewBox="0 0 1000 620" aria-hidden="true"></svg>
+                <div id="agent-graph-nodes" class="graph-nodes"></div>
+              </div>
+            </section>
 
-              <section class="panel">
-                <div class="panel-head compact">
-                  <div>
-                    <h2>权重与启停</h2>
-                    <p class="panel-copy">作用是决定预测时各子智能体是否参与，以及各自贡献权重；只有确认后才会生效。</p>
-                  </div>
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>自优化提案</h2>
+                  <p class="panel-copy">系统先给出建议，人手动确认后才会影响下一轮预测参数。</p>
                 </div>
-                <div id="scope-controls" class="scope-controls"></div>
-              </section>
-            </div>
-
-          </section>
-
-          <section id="agent-subview-optimization" class="agent-subview" data-agent-subview="optimization">
-            <div class="agent-main-grid">
-              <section class="panel">
-                <div class="panel-head">
-                  <div>
-                    <h2>自优化提案</h2>
-                    <p class="panel-copy">系统先给出建议，人手动确认后才会改变下一轮预测所用的权重与启停状态。</p>
-                  </div>
-                  <div class="head-side">
-                    <button id="proposal-generate" class="primary-button" type="button">生成提案</button>
-                    <button id="proposal-approve" class="secondary-button" type="button">确认应用</button>
-                    <button id="proposal-reject" class="ghost-button" type="button">暂不应用</button>
-                  </div>
+                <div class="head-side">
+                  <button id="proposal-generate" class="primary-button" type="button">生成提案</button>
+                  <button id="proposal-approve" class="secondary-button" type="button">确认应用</button>
+                  <button id="proposal-reject" class="ghost-button" type="button">暂不应用</button>
                 </div>
-                <div id="proposal-status" class="proposal-status" aria-live="polite">待生成</div>
-                <div id="proposal-panel" class="proposal-panel"></div>
-              </section>
-
-              <section class="panel">
-                <div class="panel-head compact">
-                  <div>
-                    <h2>当前权重快照</h2>
-                    <p class="panel-copy">用于核对提案生效前后各个子智能体的状态变化。</p>
-                  </div>
-                </div>
-                <div id="optimization-scope-controls" class="scope-controls"></div>
-              </section>
-            </div>
+              </div>
+              <div id="proposal-status" class="proposal-status" aria-live="polite">待生成</div>
+              <div id="proposal-panel" class="proposal-panel"></div>
+            </section>
           </section>
         </section>
 

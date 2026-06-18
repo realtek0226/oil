@@ -297,11 +297,8 @@ const dom = {
   navLogo: document.getElementById("nav-logo"),
   mainTabs: Array.from(document.querySelectorAll(".main-tab")),
   views: Array.from(document.querySelectorAll(".view")),
-  agentSubTabs: Array.from(document.querySelectorAll(".sub-tab")),
-  agentSubViews: Array.from(document.querySelectorAll(".agent-subview")),
   sortTabs: Array.from(document.querySelectorAll(".sort-tab")),
   themeButtons: Array.from(document.querySelectorAll("[data-theme-value]")),
-  agentsSubnav: document.getElementById("agents-subnav"),
   globalStatus: document.getElementById("global-status"),
   marketRefreshMeta: document.getElementById("market-refresh-meta"),
   accountEntry: document.getElementById("account-entry"),
@@ -388,8 +385,6 @@ const dom = {
   agentOverviewGrid: document.getElementById("agent-overview-grid"),
   agentGraphSvg: document.getElementById("agent-graph-svg"),
   agentGraphNodes: document.getElementById("agent-graph-nodes"),
-  scopeControls: document.getElementById("scope-controls"),
-  optimizationScopeControls: document.getElementById("optimization-scope-controls"),
   proposalGenerate: document.getElementById("proposal-generate"),
   proposalApprove: document.getElementById("proposal-approve"),
   proposalReject: document.getElementById("proposal-reject"),
@@ -439,7 +434,6 @@ const dom = {
 
 const state = {
   currentView: "home",
-  currentAgentSubView: "overview",
   selectedProduct: "GASOLINE_92",
   selectedHorizon: "D1",
   selectedRegionalHorizon: "D1",
@@ -4738,36 +4732,6 @@ function renderAgentGraph() {
     </div>`;
 }
 
-function renderScopeBlocks(target, scopes) {
-  if (!target) return;
-  if (!scopes?.length) {
-    target.innerHTML = emptyState("暂无权重与启停数据");
-    return;
-  }
-  target.innerHTML = scopes.map((scope) => {
-    return `
-      <section class="scope-block">
-        <h3 class="scope-title">${escapeHtml(scope.scope_label)}</h3>
-        <div class="scope-rows">
-          ${(scope.controls || []).map((control) => {
-            return `
-              <div class="scope-row">
-                <div>
-                  <div class="scope-agent">${escapeHtml(control.label)}</div>
-                  <div class="scope-note">${escapeHtml(control.role)}</div>
-                </div>
-                <div class="scope-values">
-                  <span class="tag ${control.enabled ? "" : "tag-muted"}">${control.enabled ? "启用" : "停用"}</span>
-                  <strong>${formatNumber(control.weight, 2)}</strong>
-                  <span class="scope-note">默认 ${formatNumber(control.default_weight, 2)}</span>
-                </div>
-              </div>`;
-          }).join("")}
-        </div>
-      </section>`;
-  }).join("");
-}
-
 function currentProposal() {
   const payload = state.optimizationState;
   return payload?.pending_proposals?.[0] || payload?.latest_proposal || null;
@@ -5341,8 +5305,6 @@ async function loadAgentWorkspace() {
 
     renderAgentOverview();
     renderAgentGraph();
-    renderScopeBlocks(dom.scopeControls, optimization.scopes);
-    renderScopeBlocks(dom.optimizationScopeControls, optimization.scopes);
     renderProposalPanel();
 
     setChip(dom.agentStatusChip, `已更新 / 近 ${overview.recent_run_count ?? 0} 次样本`);
@@ -5351,8 +5313,6 @@ async function loadAgentWorkspace() {
     console.error(error);
     dom.agentOverviewGrid.innerHTML = emptyState(`智能体总览加载失败：${error.message || error}`);
     dom.agentGraphNodes.innerHTML = emptyState("关系图加载失败");
-    dom.scopeControls.innerHTML = emptyState("权重与启停加载失败");
-    dom.optimizationScopeControls.innerHTML = emptyState("权重与启停加载失败");
     dom.proposalPanel.innerHTML = emptyState("自优化提案加载失败");
     setChip(dom.agentStatusChip, "加载失败", "error");
     setGlobalStatus("智能体管理加载失败", "error");
@@ -5371,8 +5331,6 @@ async function generateProposal() {
     const payload = await fetchJson("/api/v1/agents/optimization/proposals/generate", { method: "POST" });
     state.optimizationState = payload.state;
     renderProposalPanel();
-    renderScopeBlocks(dom.scopeControls, payload.state.scopes);
-    renderScopeBlocks(dom.optimizationScopeControls, payload.state.scopes);
     setGlobalStatus("自优化提案已生成");
     const count = payload.proposal?.suggestions?.length ?? 0;
     setProposalStatus(count ? `已生成 ${count} 条建议，等待人工确认` : "已生成提案，本次暂无新调整", "success");
@@ -5409,8 +5367,6 @@ async function confirmProposal(approved) {
     );
     state.optimizationState = payload.state;
     renderProposalPanel();
-    renderScopeBlocks(dom.scopeControls, payload.state.scopes);
-    renderScopeBlocks(dom.optimizationScopeControls, payload.state.scopes);
     await loadAgentWorkspace();
     setGlobalStatus(approved ? "提案已应用" : "提案已驳回");
     setProposalStatus(approved ? "提案已应用，下一轮预测生效" : "提案已驳回，当前权重不变", approved ? "success" : "");
@@ -5423,7 +5379,7 @@ async function confirmProposal(approved) {
 }
 
 function syncHash() {
-  const hash = state.currentView === "agents" ? `agents:${state.currentAgentSubView}` : state.currentView;
+  const hash = state.currentView;
   if (window.location.hash.replace("#", "") !== hash) {
     window.location.hash = hash;
   }
@@ -5439,7 +5395,6 @@ function activateMainView(view) {
   dom.views.forEach((panel) => {
     panel.classList.toggle("is-active", panel.dataset.view === nextView);
   });
-  dom.agentsSubnav.hidden = nextView !== "agents";
   syncHash();
 
   if (nextView === "policy" && !state.policyFeed) {
@@ -5459,24 +5414,12 @@ function activateMainView(view) {
   }
 }
 
-function activateAgentSubView(subview) {
-  state.currentAgentSubView = subview;
-  dom.agentSubTabs.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.agentSubview === subview);
-  });
-  dom.agentSubViews.forEach((panel) => {
-    panel.classList.toggle("is-active", panel.dataset.agentSubview === subview);
-  });
-  syncHash();
-}
-
 function parseHash() {
   const raw = window.location.hash.replace("#", "").trim();
-  if (!raw) return { view: "home", subview: "overview" };
-  const [view, subview] = raw.split(":");
+  if (!raw) return { view: "home" };
+  const [view] = raw.split(":");
   return {
     view: ["home", "clearview", "accuracy", "policy", "agents", "profile", "permissions"].includes(view) ? view : "home",
-    subview: subview === "optimization" ? "optimization" : "overview",
   };
 }
 
@@ -6030,10 +5973,6 @@ function bindEvents() {
   dom.accountEntry?.addEventListener("click", () => activateMainView(firstAccessibleView("profile")));
   dom.logoutButton?.addEventListener("click", logoutCurrentUser);
 
-  dom.agentSubTabs.forEach((button) => {
-    button.addEventListener("click", () => activateAgentSubView(button.dataset.agentSubview));
-  });
-
   dom.sortTabs.forEach((button) => {
     button.addEventListener("click", async () => {
       state.policySortMode = button.dataset.sortMode;
@@ -6153,9 +6092,8 @@ function bindEvents() {
   });
 
   window.addEventListener("hashchange", () => {
-    const { view, subview } = parseHash();
+    const { view } = parseHash();
     if (state.currentView !== view) activateMainView(view);
-    if (view === "agents" && state.currentAgentSubView !== subview) activateAgentSubView(subview);
   });
 }
 
@@ -6165,10 +6103,9 @@ async function init() {
   await loadCurrentUser();
   loadChatHistory();
   bindEvents();
-  const { view, subview } = parseHash();
+  const { view } = parseHash();
   const accessibleView = firstAccessibleView(view);
   activateMainView(accessibleView);
-  activateAgentSubView(subview);
 
   renderChatLog();
   renderChatHistory();

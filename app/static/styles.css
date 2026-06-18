@@ -298,8 +298,8 @@ body[data-theme="dark"] .login-brand > .login-brand-logo {
   gap: 10px;
   padding: 4px;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  background: transparent;
 }
 
 .account-entry {
@@ -565,7 +565,7 @@ body[data-theme="dark"] .login-brand > .login-brand-logo {
   display: block;
 }
 
-.agent-subview {
+.agent-workspace {
   min-width: 0;
 }
 
